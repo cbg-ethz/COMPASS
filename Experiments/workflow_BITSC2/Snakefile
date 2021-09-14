@@ -1,0 +1,144 @@
+import numpy as np
+import pandas as pd
+
+seeds = list(range(100))
+#n_cells = 400
+n_cells_COMPASS=2000
+n_cells_BITSC2=100
+n_nodes = [4,6,8]
+n_muts= [7,12,20]
+n_CNVs= 3
+dropout_sigma= 0.0
+nodeprob_concentration= 10
+regionprobs_sigma = [0.0,0.1,0.3,0.5,0.7]
+theta = 1000
+depth=20
+
+outdir = "out/"
+tmpdir = "tmp/"
+
+rule all:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "results_BITSC2.csv"
+
+rule combine_results:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        expand(outdir+"syn_{nnodes}nodes_{nmuts}muts_{rhosig}rhosigma_{seed}_trees.txt_out_BD", nnodes=n_nodes,nmuts=n_muts,rhosig=regionprobs_sigma,seed=seeds)
+    output:
+        "results_BITSC2.csv"
+    run:
+        d={"nodes":[],"muts":[],"rho":[],"method":[],"BD":[]}
+        for infile in input:
+            with open(infile,"r") as f:
+                result_COMPASS = int(f.readline())
+                result_BITSC2 = int(f.readline())
+            namesplit = infile.split("_")
+            N_nodes=int(namesplit[1][:-5])
+            N_muts=int(namesplit[2][:-4])
+            rhosig=float(namesplit[3][:-8])
+            d["nodes"].append(N_nodes)
+            d["muts"].append(N_muts)
+            d["rho"].append(rhosig)
+            d["method"].append("COMPASS")
+            d["BD"].append(result_COMPASS)
+            d["nodes"].append(N_nodes)
+            d["muts"].append(N_muts)
+            d["rho"].append(rhosig)
+            d["method"].append("BITSC2")
+            d["BD"].append(result_BITSC2)
+        df = pd.DataFrame(d)
+        df.to_csv("results_BITSC2.csv",index=False)
+
+rule compute_BD:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        outdir+"{sample}_trees.txt",
+    output:
+        outdir+"{sample}_trees.txt_out_BD"
+    shell:
+        "./PW_BD {input}"
+
+rule convert_to_BD:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        outdir+"{sample}_treeTRUE.gv",
+        outdir+"{sample}_treeCOMPASS.gv",
+        outdir+"{sample}_treeBITSC2.csv",
+        outdir+"{sample}_originsBITSC2.csv"
+    output:
+        outdir+"{sample}_trees.txt"
+    shell:
+        "python convert_trees_BD.py -i {outdir}{wildcards.sample} -o {outdir}{wildcards.sample}_trees.txt"
+
+
+
+
+rule generate_synthetic_data:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{rhosig}rhosigma_{seed}_variants.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{rhosig}rhosigma_{seed}_regions.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{rhosig}rhosigma_{seed}_AD.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{rhosig}rhosigma_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{rhosig}rhosigma_{seed}_tree.gv"
+    shell:
+        "python generate_synthetic_data_BITSC2.py -o {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{wildcards.ncells}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
+        "--ncells {wildcards.ncells} --nnodes {wildcards.nnodes} --nmuts {wildcards.nmuts} --nCNV {n_CNVs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --regionprobsigma {wildcards.rhosig} --seed {wildcards.seed}"
+
+rule cp_true_tree:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_tree.gv"
+    output:
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{rhosig}rhosigma_{seed}_treeTRUE.gv"
+    shell: 
+        "cp {input} {output}"
+
+rule infer_tree_COMPASS:
+    params:
+        threads="4",
+        runtime="50",
+        memory="5100"
+    input:
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_variants.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_regions.csv"
+    output:
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{rhosig}rhosigma_{seed}_treeCOMPASS.gv"
+    shell:
+        "./COMPASS -o {output} -i {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{n_cells_COMPASS}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} --nchains 4 --chainlength 5000 --burnin 2000 --temperature 10 -d 0 --filterregions 0"
+
+rule infer_tree_BITSC2:
+    params:
+        runtime="3:00",
+        threads="1",
+        memory="1000"
+    input:
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_AD.csv"
+    output:
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{rhosig}rhosigma_{seed}_originsBITSC2.csv",
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{rhosig}rhosigma_{seed}_treeBITSC2.csv"
+    shell:
+        "Rscript --vanilla BITSC2/code/BiTSC2_run_script.R {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{n_cells_BITSC2}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
+        "{outdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{wildcards.rhosig}rhosigma_{wildcards.seed} {depth} 4000 {wildcards.nnodes}"
