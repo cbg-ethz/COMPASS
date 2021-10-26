@@ -5,7 +5,7 @@ import pandas as pd
 from scipy.stats import nbinom, betabinom
 
 
-def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,propCNVleaves, \
+def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs, \
                     nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,\
                     sequencing_depth,theta=10000,regionprob_sigma=0,seed=0):
     np.random.seed(seed)
@@ -196,12 +196,11 @@ if __name__=="__main__":
     parser.add_argument('--ncells', type = int,default = 2000, help='Number of cells')
     parser.add_argument('--nSNVs', type = int,default = 6, help='Number of SNVs')
     parser.add_argument('--nCNVs', type = int,default = 2, help='Number of CNVs')
-    parser.add_argument('--propCNVleaves', type=float, default=0.0,help='Proportion of CNVs on leaves without SNVs')
     parser.add_argument('--dropoutsigma', type = float,default = 0.03, help='Standard deviation when sampling the dropout rates')
     parser.add_argument('--regionprobsigma', type = float,default = 0.00, help='Standard deviation when sampling the region probabilities')
     parser.add_argument('--theta', type = float,default = 10, help='Inverse overdispersion parameter for the negative binomial (when sampling the sequencing depth)')
     parser.add_argument('--depth', type = int,default = 10, help='Sequencing depth')
     parser.add_argument('--nodeprobconcentration', type=float, default=1,help='Concentration parameter of the dirichlet distribution when sampling the node probabilities.')
     args = parser.parse_args()
-    generate_data(args.o,n_nodes=args.nnodes,n_cells=args.ncells,n_SNVs=args.nSNVs,n_CNVs=args.nCNVs, propCNVleaves=args.propCNVleaves,nodeprobs_concentration=args.nodeprobconcentration,\
+    generate_data(args.o,n_nodes=args.nnodes,n_cells=args.ncells,n_SNVs=args.nSNVs,n_CNVs=args.nCNVs,nodeprobs_concentration=args.nodeprobconcentration,\
         dropout_rate_avg=0.04,dropout_rate_sigma=args.dropoutsigma,seed=args.seed,sequencing_depth=args.depth,theta=args.theta,regionprob_sigma=args.regionprobsigma)
