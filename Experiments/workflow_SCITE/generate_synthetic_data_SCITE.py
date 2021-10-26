@@ -5,9 +5,9 @@ import pandas as pd
 from scipy.stats import nbinom, betabinom
 
 
-def generate_data(basename,n_muts,n_cells,nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,seed=0):
+def generate_data(basename,n_SNVs,n_cells,nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,seed=0):
     np.random.seed(seed)
-    n_nodes = n_muts+1
+    n_nodes = n_SNVs+1
     sequencing_error_rate = 0.01
     omega_hom = 20
     omega_het = 6
@@ -37,36 +37,36 @@ def generate_data(basename,n_muts,n_cells,nodeprobs_concentration,dropout_rate_a
         for child in children[top]: stack.append(child)
 
 
-    # Add mutations to the nodes
-    muts = [[] for x in range(n_nodes)]
-    for i in range(1,n_nodes): muts[i] = [i-1]
+    # Add SNVations to the nodes
+    SNVs = [[] for x in range(n_nodes)]
+    for i in range(1,n_nodes): SNVs[i] = [i-1]
 
 
     
     # Compute the genotypes of each node
-    n_ref_allele = 2*np.ones((n_muts,n_nodes),dtype=int)
-    n_alt_allele =  np.zeros((n_muts,n_nodes),dtype=int)
+    n_ref_allele = 2*np.ones((n_SNVs,n_nodes),dtype=int)
+    n_alt_allele =  np.zeros((n_SNVs,n_nodes),dtype=int)
     for n in DFT_order:
         if n!=0:
             n_ref_allele[:,n] = n_ref_allele[:,parents[n]]
             n_alt_allele[:,n] = n_alt_allele[:,parents[n]]
-        for mut in muts[n]:
-            if n_ref_allele[mut,n]>0:
-                n_ref_allele[mut,n]-=1
-                n_alt_allele[mut,n]+=1
+        for SNV in SNVs[n]:
+            if n_ref_allele[SNV,n]>0:
+                n_ref_allele[SNV,n]-=1
+                n_alt_allele[SNV,n]+=1
 
     # Sample node probabilities (minimum node probability of 2%)
     node_probabilities = np.random.dirichlet([nodeprobs_concentration]*n_nodes) +0.02
     node_probabilities = node_probabilities / sum(node_probabilities)
     # Sample dropout rates
-    dropout_rates = np.abs(np.random.normal(dropout_rate_avg,dropout_rate_sigma,n_muts))
+    dropout_rates = np.abs(np.random.normal(dropout_rate_avg,dropout_rate_sigma,n_SNVs))
     # Assign cells to nodes and generate read counts
-    ref_reads =  np.zeros((n_muts,n_cells),dtype=int)
-    alt_reads =  np.zeros((n_muts,n_cells),dtype=int)
-    genotypes = np.zeros((n_muts,n_cells),dtype=int)
+    ref_reads =  np.zeros((n_SNVs,n_cells),dtype=int)
+    alt_reads =  np.zeros((n_SNVs,n_cells),dtype=int)
+    genotypes = np.zeros((n_SNVs,n_cells),dtype=int)
     for j in range(n_cells):
         node = int(np.random.choice(n_nodes, p=node_probabilities))
-        for i in range(n_muts):
+        for i in range(n_SNVs):
             depth = np.random.randint(10,40)
             c_r=0 # number of copies of the ref allele that did not get dropped out
             c_a=0 # number of copies of the alt allele that did not get dropped out
@@ -108,11 +108,11 @@ def generate_data(basename,n_muts,n_cells,nodeprobs_concentration,dropout_rate_a
     np.savetxt(basename+"_genotypes.csv",genotypes.astype(int),delimiter=" ",fmt='%i')
 
     d={}
-    d["CHR"] = list(range(n_muts))
-    d["REGION"] = list(range(n_muts))
+    d["CHR"] = list(range(n_SNVs))
+    d["REGION"] = list(range(n_SNVs))
     for j in range(n_cells):
         d[j]=[]
-    for i in range(n_muts):
+    for i in range(n_SNVs):
         for j in range(n_cells):
             d[j].append(str(ref_reads[i,j])+":"+str(alt_reads[i,j]))
     df_variants = pd.DataFrame(d)
@@ -129,9 +129,9 @@ def generate_data(basename,n_muts,n_cells,nodeprobs_concentration,dropout_rate_a
             file.write(str(parents[n])+" -> "+str(n)+" [color=dimgray penwidth=4 weight=2];\n")
         for n in range(n_nodes):
             label = str(n)+"[label=<"
-            for mut in muts[n]:
-                label+=str(mut)+":"+str(mut)+"<br/>"
-            if len(muts[n])==0: label+=" "
+            for SNV in SNVs[n]:
+                label+=str(SNV)+":"+str(SNV)+"<br/>"
+            if len(SNVs[n])==0: label+=" "
             label+=">];\n"
             file.write(label)
         for n in range(n_nodes):
@@ -147,10 +147,10 @@ if __name__=="__main__":
     parser.add_argument('-o', type = str, help='Output basename')
     parser.add_argument('--seed', type = int, default=0, help='Random seed')
     parser.add_argument('--ncells', type = int,default = 2000, help='Number of cells')
-    parser.add_argument('--nmuts', type = int,default = 6, help='Number of mutations')
+    parser.add_argument('--nSNVs', type = int,default = 6, help='Number of SNVs')
     parser.add_argument('--dropoutrate', type = float,default = 0.04, help='Dropout rate')
     parser.add_argument('--dropoutsigma', type = float,default = 0.0, help='Standard deviation when sampling the dropout rates')
     parser.add_argument('--nodeprobconcentration', type=float, default=1,help='Concentration parameter of the dirichlet distribution when sampling the node probabilities.')
     args = parser.parse_args()
-    generate_data(args.o,n_cells=args.ncells,n_muts=args.nmuts,nodeprobs_concentration=args.nodeprobconcentration,\
+    generate_data(args.o,n_cells=args.ncells,n_SNVs=args.nSNVs,nodeprobs_concentration=args.nodeprobconcentration,\
         dropout_rate_avg=args.dropoutrate,dropout_rate_sigma=args.dropoutsigma,seed=args.seed)

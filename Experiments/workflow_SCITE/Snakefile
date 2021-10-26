@@ -3,7 +3,7 @@ import pandas as pd
 
 seeds = list(range(50))
 n_cells = 5000
-n_muts= [3,5,8]
+n_SNVs= [3,5,8]
 dropout_rates=[0.04,0.07,0.10]
 dropout_sigma= 0.0
 nodeprob_concentration=[0.1,0.2,0.3,0.4,0.5,0.6] 
@@ -24,27 +24,27 @@ rule combine_results:
         runtime="10",
         memory="1000"
     input:
-        expand(outdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_trees.txt_out_BD",nmuts=n_muts,mu=dropout_rates,nodeprobconcentration=nodeprob_concentration,seed=seeds)
+        expand(outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_trees.txt_out_BD",nSNVs=n_SNVs,mu=dropout_rates,nodeprobconcentration=nodeprob_concentration,seed=seeds)
     output:
         "results_SCITE.csv"
     run:
-        d={"mutations":[],"dropout_rate":[],"nodeprob":[],"method":[],"BD":[]}
+        d={"SNVs":[],"dropout_rate":[],"nodeprob":[],"method":[],"BD":[]}
         for infile in input:
             with open(infile,"r") as f:
                 result_COMPASS = int(f.readline())
                 result_SCITE = int(f.readline())
             namesplit = infile.split("_")
-            N_muts=int(namesplit[1][:-4])
+            N_SNVs=int(namesplit[1][:-4])
             droprate= float(namesplit[2][:-11])
             nodeprob = float(namesplit[3][:-8])
             d["nodeprob"].append(nodeprob)
             d["method"].append("COMPASS")
-            d["mutations"].append(N_muts)
+            d["SNV"].append(N_SNVs)
             d["dropout_rate"].append(droprate)
             d["BD"].append(result_COMPASS)
             d["nodeprob"].append(nodeprob)
             d["method"].append("SCITE")
-            d["mutations"].append(N_muts)
+            d["SNVs"].append(N_SNVs)
             d["dropout_rate"].append(droprate)
             d["BD"].append(result_SCITE)
         df = pd.DataFrame(d)
@@ -84,15 +84,15 @@ rule generate_synthetic_data:
         runtime="10",
         memory="1000"
     output:
-        tmpdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_variants.csv",
-        tmpdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_genotypes.csv",
-        tmpdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_tree.gv",
-        outdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_treeTRUE.gv"
+        tmpdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_variants.csv",
+        tmpdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_genotypes.csv",
+        tmpdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_tree.gv",
+        outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_treeTRUE.gv"
     shell:
-        "python generate_synthetic_data_SCITE.py -o {tmpdir}syn_{wildcards.nmuts}muts_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}"\
-        " --seed {wildcards.seed} --nmuts {wildcards.nmuts}"\
+        "python generate_synthetic_data_SCITE.py -o {tmpdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}"\
+        " --seed {wildcards.seed} --nSNVs {wildcards.nSNVs}"\
         " --ncells {n_cells} --dropoutrate {wildcards.mu} --dropoutsigma {dropout_sigma} --nodeprobconcentration {wildcards.nodeprobconcentration};"\
-        "cp {tmpdir}syn_{wildcards.nmuts}muts_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}_tree.gv {outdir}syn_{wildcards.nmuts}muts_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}_treeTRUE.gv"
+        "cp {tmpdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}_tree.gv {outdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed}_treeTRUE.gv"
 
 
 rule infer_tree_COMPASS:
@@ -113,8 +113,8 @@ rule infer_tree_SCITE:
         runtime="10",
         memory="2000"
     input:
-        tmpdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_genotypes.csv"
+        tmpdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_genotypes.csv"
     output:
-        outdir+"syn_{nmuts}muts_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_map0.gv"
+        outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_map0.gv"
     shell:
-        "./scite -i {input} -o {outdir}syn_{wildcards.nmuts}muts_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed} -n {wildcards.nmuts} -m {n_cells} -r 4 -l 5000 -fd 0.01 -ad {wildcards.mu} {wildcards.mu} -cc 0.01 -s"
+        "./scite -i {input} -o {outdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed} -n {wildcards.nSNVs} -m {n_cells} -r 4 -l 5000 -fd 0.01 -ad {wildcards.mu} {wildcards.mu} -cc 0.01 -s"

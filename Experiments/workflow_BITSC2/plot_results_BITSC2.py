@@ -6,8 +6,8 @@ import pandas as pd
 df = pd.read_csv("results_BITSC2.csv")
 sns.set(font="Helvetica",font_scale=2.0)
 g = sns.catplot(x="rho", y="BD",hue="method", col="nodes",row="muts", data=df, kind="box",palette="Set1",showmeans=True,meanprops={"markersize":10,"marker":"X"},
-        margin_titles=False,legend=False,fliersize=2) # , height=4, aspect=.7
-g.set_axis_labels("Variance in region coverage","Bourque Distance")
+        margin_titles=False,legend=False,fliersize=2,height=3,aspect=1.7) # , height=4, aspect=.7
+g.set_axis_labels("Variance in coverage between regions","Bourque Distance to the true tree")
 for AX in g.axes.flatten():
     for i,artist in enumerate(AX.artists):
         # Set the linecolor on the artist to the facecolor, and set the facecolor to None
@@ -36,8 +36,16 @@ for AX in g.axes[2]:
         else:
             return "{:.1f}".format(label)
     AX.xaxis.set_major_formatter(plt.FuncFormatter(format_func))
-g.axes[0][1].legend(loc='upper center', bbox_to_anchor=(0.5, 1.30),
+g.axes[0][1].legend(loc='upper center', bbox_to_anchor=(0.5, 1.60),
           ncol=2, fancybox=True, shadow=False)
-plt.show()
+#plt.show()
+plt.ylim(0,11)
+
+g.axes[0][0].set_ylabel("")
+g.axes[2][0].set_ylabel("")
+
+g.axes[2][0].set_xlabel("")
+g.axes[2][2].set_xlabel("")
+
 
 plt.savefig("Comparison_BITSC2.png",dpi=500,bbox_inches="tight",pad_inches=0.1)

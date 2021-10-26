@@ -5,8 +5,7 @@ import pandas as pd
 from scipy.stats import nbinom, betabinom
 
 
-def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,propCNVleaves, \
-                    nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,\
+def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,propCNVleaves,nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,\
                     sequencing_depth,theta=10000,regionprob_sigma=0,seed=0):
     np.random.seed(seed)
     sequencing_error_rate = 0.01
@@ -40,29 +39,46 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,propCNVleaves, \
     muts = [[] for x in range(n_nodes)]
     CNVs = [[] for x in range(n_nodes)] # each CNV is a triplet (locus,gain_loss,allele)
 
-    # Assign events to nodes
-    # Each node must have at least one event (SNV or CNV)
-    nodes = list(range(1,n_nodes)) + list(np.random.choice(range(1,n_nodes),n_SNVs+n_CNVs - n_nodes+1,replace=True))
-    np.random.shuffle(nodes)
-    
-    # SNVs
-    for i in range(n_SNVs):
-        muts[nodes[i]].append(i)
+    # Choose which loci are affected by a CNV
+    loci_with_CNV = sorted(np.random.choice(n_SNVs,n_CNVs,replace=False))
+    n_CNV_leaves = round(propCNVleaves*n_CNVs) # number of CNVs which are located at a leaf which does not contain a mutation
+    nodesWithMuts= list(range(1,n_nodes))
+    leaves = []
+    for n in range(len(children)):
+        if len(children[n])==0: leaves.append(n)
+    # Assign CNVs to nodes
+    for i in range(n_CNVs):
+        locus = loci_with_CNV[i]
+        if i<n_CNV_leaves:
+            node = np.random.choice(leaves)
+            if node in nodesWithMuts:
+                nodesWithMuts.remove(node)
+        else:
+            node = np.random.choice(range(1,n_nodes))
+        CNVs[node].append( (locus, np.random.choice([-1,1]), np.random.choice([0,1])) )
+
+    # Assign mutation to nodes. Each node must have at least one event (mutation or CNV)
+    shuffled_muts=list(range(n_SNVs))
+    np.random.shuffle(shuffled_muts)
+    for i in range(len(nodesWithMuts)): # exclude root here ?
+        muts[nodesWithMuts[i]].append(shuffled_muts[i])
+    for i in range(len(nodesWithMuts),n_SNVs):
+        muts[np.random.choice(range(1,n_nodes))].append(shuffled_muts[i])
     for n in range(n_nodes):
         muts[n] = sorted(muts[n])
-    # CNVs
-    loci_with_CNV = sorted(np.random.choice(n_SNVs,n_CNVs,replace=False))
-    for i in range(n_CNVs):
-        n = nodes[n_SNVs+i]
-        loss_gain = np.random.choice([-1,1])
-        allele = 0
-        # copy number losses can only affect the reference allele,
-        # and copy number gains can only affect the mutated alle when 
-        # they are located in the same node as the corresponding mutation
-        if loss_gain==1 and loci_with_CNV[i] in muts[n]:
-            allele = np.random.choice([0,1])
+    
 
-        CNVs[n].append( (loci_with_CNV[i] , loss_gain , allele) )
+    
+    # Make sure that each CNV is valid: copy number losses can only affect the reference allele,
+    # and copy number gains can only affect the mutated alle when they are located in the same node as the corresponding mutation
+    for n in range(len(CNVs)):
+        for i in range(len(CNVs[n])):
+            if CNVs[n][i][1]==-1 and CNVs[n][i][2]==1: # loss cannot affect the mutated allele
+                CNVs[n][i] = (CNVs[n][i][0],-1,0)
+            if CNVs[n][i][1]==1 and CNVs[n][i][2]==1: # gain can only affect the mutated allele if the CNV is in the same node as the mutation
+                locus = CNVs[n][i][0]
+                if not locus in muts[n]:
+                    CNVs[n][i] = (locus,1,0)
 
     # Compute the genotypes of each node
     n_ref_allele = 2*np.ones((n_SNVs,n_nodes),dtype=int)
@@ -196,7 +212,7 @@ if __name__=="__main__":
     parser.add_argument('--ncells', type = int,default = 2000, help='Number of cells')
     parser.add_argument('--nSNVs', type = int,default = 6, help='Number of SNVs')
     parser.add_argument('--nCNVs', type = int,default = 2, help='Number of CNVs')
-    parser.add_argument('--propCNVleaves', type=float, default=0.0,help='Proportion of CNVs on leaves without SNVs')
+    parser.add_argument('--propCNVleaves', type=float, default=0.0,help='Proportion of CNVs on leaves without mutations')
     parser.add_argument('--dropoutsigma', type = float,default = 0.03, help='Standard deviation when sampling the dropout rates')
     parser.add_argument('--regionprobsigma', type = float,default = 0.00, help='Standard deviation when sampling the region probabilities')
     parser.add_argument('--theta', type = float,default = 10, help='Inverse overdispersion parameter for the negative binomial (when sampling the sequencing depth)')

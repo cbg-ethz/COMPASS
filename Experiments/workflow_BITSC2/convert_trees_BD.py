@@ -97,7 +97,6 @@ def read_tree_BITSC2(basename):
     tree={}
     with open(basename+"_treeBITSC2.csv","r") as file:
         parents=[]
-        count=0
         for line in file:
             parents.append(int(line)-1)
         tree["parents"] = parents
