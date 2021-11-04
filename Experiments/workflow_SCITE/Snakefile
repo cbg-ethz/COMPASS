@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-seeds = list(range(50))
+seeds = list(range(100))
 n_cells = 5000
 n_SNVs= [3,5,8]
 dropout_rates=[0.04,0.07,0.10]
@@ -24,29 +24,29 @@ rule combine_results:
         runtime="10",
         memory="1000"
     input:
-        expand(outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_trees.txt_out_BD",nSNVs=n_SNVs,mu=dropout_rates,nodeprobconcentration=nodeprob_concentration,seed=seeds)
+        expand(outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_MP3.txt",nSNVs=n_SNVs,mu=dropout_rates,nodeprobconcentration=nodeprob_concentration,seed=seeds)
     output:
         "results_SCITE.csv"
     run:
-        d={"SNVs":[],"dropout_rate":[],"nodeprob":[],"method":[],"BD":[]}
+        d={"SNVs":[],"dropout_rate":[],"nodeprob":[],"method":[],"MP3":[]}
         for infile in input:
             with open(infile,"r") as f:
-                result_COMPASS = int(f.readline())
-                result_SCITE = int(f.readline())
+                result_COMPASS = float(f.readline())
+                result_SCITE = float(f.readline())
             namesplit = infile.split("_")
             N_SNVs=int(namesplit[1][:-4])
             droprate= float(namesplit[2][:-11])
             nodeprob = float(namesplit[3][:-8])
             d["nodeprob"].append(nodeprob)
             d["method"].append("COMPASS")
-            d["SNV"].append(N_SNVs)
+            d["SNVs"].append(N_SNVs)
             d["dropout_rate"].append(droprate)
-            d["BD"].append(result_COMPASS)
+            d["MP3"].append(result_COMPASS)
             d["nodeprob"].append(nodeprob)
             d["method"].append("SCITE")
             d["SNVs"].append(N_SNVs)
             d["dropout_rate"].append(droprate)
-            d["BD"].append(result_SCITE)
+            d["MP3"].append(result_SCITE)
         df = pd.DataFrame(d)
         df.to_csv("results_SCITE.csv",index=False)
 
@@ -78,6 +78,20 @@ rule convert_to_BD:
     shell:
         "python convert_trees_BD.py -i {outdir}{wildcards.sample} -o {outdir}{wildcards.sample}_trees.txt"
 
+rule compute_MP3:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        outdir+"{sample}_treeTRUE.gv",
+        outdir+"{sample}_treeCOMPASS.gv",
+        outdir+"{sample}_map0.gv"
+    output:
+        outdir+"{sample}_MP3.txt"
+    shell:
+        "python compute_MP3.py -i {outdir}{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
 rule generate_synthetic_data:
     params:
         threads="1",
@@ -98,7 +112,7 @@ rule generate_synthetic_data:
 rule infer_tree_COMPASS:
     params:
         threads="4",
-        runtime="50",
+        runtime="1:50",
         memory="2000"
     input:
         tmpdir+"{sample}_variants.csv",

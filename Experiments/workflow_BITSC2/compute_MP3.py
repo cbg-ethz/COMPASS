@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import copy
 
+import mp3treesim as mp3
+
 def remove_empty_nodes(tree):
     if len(tree["muts"][0])==0 and len(tree["CNVs"][0])==0:
         tree["muts"][0].append(0)
@@ -131,6 +133,16 @@ def get_node_label(tree,node,CNVs_map):
         label_list.append(str(CNVs_map[CNV]))
     return "_".join(label_list)
 
+def get_node_label_MP3(tree,node,CNVs_map):
+    label_list=[]
+    for mut in tree["muts"][node]:
+        label_list.append(str(mut))
+    for CNV in tree["CNVs"][node]:
+        if not CNV in CNVs_map:
+            CNVs_map[CNV] = tree["n_muts"]+1+len(CNVs_map)
+        label_list.append(str(CNVs_map[CNV]))
+    return ",".join(label_list)
+
 def write_tree(tree,CNVs_map,file):
     for n in range(1,len(tree["parents"])):
         if tree["parents"][n]==0:
@@ -143,24 +155,40 @@ def write_tree(tree,CNVs_map,file):
             label_parent = get_node_label(tree,tree["parents"][n],CNVs_map)
             file.write(label_parent+" " + label + "\n")
 
+def write_tree_MP3(tree,CNVs_map,filename):
+    with open(filename,"w") as file:
+        file.write("digraph Tree { \n")
+        for n in range(len(tree["parents"])):
+            file.write(str(n) + " [label=\""+get_node_label_MP3(tree,n,CNVs_map)+"\"];\n")
+        for n in range(len(tree["parents"])):
+            file.write(str(tree["parents"][n]) + " -> " + str(n) +";")
+        file.write("}")
 
-def convert_trees(basename_in, output):
+
+def convert_trees(basename_in, basename_tmp):
     tree_true = read_tree_gv(basename_in+"_treeTRUE.gv")
     tree_COMPASS = read_tree_gv(basename_in+"_treeCOMPASS.gv")
     tree_BITSC2 = read_tree_BITSC2(basename_in)
     CNVs_map = {}
-    with open(output,"w") as file:
-        file.write("#tree TRUE: " + str(len(tree_true["muts"])-1) + "\n")
-        write_tree(tree_true,CNVs_map,file)
-        file.write("#tree COMPASS: " + str(len(tree_COMPASS["muts"])-1) + "\n")
-        write_tree(tree_COMPASS,CNVs_map,file)
-        file.write("#tree BITSC2: " + str(len(tree_BITSC2["muts"])-1) + "\n")
-        write_tree(tree_BITSC2,CNVs_map,file)
+    write_tree_MP3(tree_true,CNVs_map,basename_tmp+"TRUE-MP3.gv")
+    write_tree_MP3(tree_COMPASS,CNVs_map,basename_tmp+"COMPASS-MP3.gv")
+    write_tree_MP3(tree_BITSC2,CNVs_map,basename_tmp+"BITSC2-MP3.gv")
+
+    
+def evaluate_distances(basename_tmp,output):
+    treeTRUE = mp3.read_dotfile(basename_tmp+"TRUE-MP3.gv")
+    treeCOMPASS = mp3.read_dotfile(basename_tmp+"COMPASS-MP3.gv")
+    treeBITSC2 = mp3.read_dotfile(basename_tmp+"BITSC2-MP3.gv")
+    with open(output,"w") as outfile:
+        outfile.write(str(mp3.similarity(treeTRUE,treeCOMPASS))+"\n")
+        outfile.write(str(mp3.similarity(treeTRUE,treeBITSC2)))
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', type = str, help='Input basename')
+    parser.add_argument('--tmp', type = str, help='Temp files basename')
     parser.add_argument('-o', type = str, help='Output file')
     args = parser.parse_args()
-    convert_trees(args.i,args.o)
+    convert_trees(args.i,args.tmp)
+    evaluate_distances(args.tmp,args.o)
     
