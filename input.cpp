@@ -242,6 +242,8 @@ void filter_regions(){
     // Filter out regions for which many cells have 0 (or almost 0) reads
     double threshold = 1.0 / n_regions / 15.0;
     data.region_is_reliable.clear();
+    std::string outverbose = "The following regions are excluded from the CNV inference because their coverage is too low: ";
+    bool regions_filtered=false;
     for (int k=0;k<n_regions;k++){
         int count_cells_below_threshold=0;
         double mean=0;
@@ -251,7 +253,16 @@ void filter_regions(){
             mean+= 1.0*cells[j].region_counts[k] / cells[j].total_counts / n_cells;
         }
         data.region_is_reliable.push_back(((1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions)));
+        regions_filtered = regions_filtered || (!(1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions));
     }
+    if (regions_filtered){
+        std::cout<<"The following regions are excluded from the CNV inference because their coverage is too low: ";
+        for (int k=0;k<n_regions;k++){
+            if (!data.region_is_reliable[k]) std::cout<<data.region_to_name[k]<<",";
+        }
+        std::cout<<std::endl;
+    }
+    
 }
 
 void init_params(){

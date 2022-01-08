@@ -82,7 +82,7 @@ class Tree{
 
         void find_CNV();
         void allow_CNV(){use_CNV=true;}
-        bool select_regions();
+        bool select_regions(int index=-1);
         bool contains_candidate_regions(){return candidate_regions.size()>0;}
 
         //MCMC moves

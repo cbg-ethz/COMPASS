@@ -13,13 +13,14 @@ extern int n_regions;
 extern Data data;
 extern Params parameters;
 
-Inference::Inference(std::string name, double temperature):
+Inference::Inference(std::string name, double temperature, int index):
         cache_scores{new Scores()},
         t{cache_scores,false},
         t_prime{t},
         best_tree{t},
         tree_name{name},
-        max_temperature{temperature}
+        max_temperature{temperature},
+        index(index)
     {
 
     // Weight of each MCMC move (does not have to be normalized)
@@ -46,13 +47,15 @@ Inference::~Inference(){
 Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
 
     //First, find the best tree without CNV.
+    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting first phase (finding the best tree without CNV)."<<std::endl;
+    else std::cout<<"Starting first phase (finding the best tree without CNV)."<<std::endl;
     mcmc(false, nb_steps,burn_in);
     if (!use_CNV){
         if (tree_name!="") best_tree.to_dot(tree_name+".gv");
         return best_tree;
     }
 
-    best_tree.select_regions(); 
+    best_tree.select_regions(index); 
     if (!best_tree.contains_candidate_regions()){
         //If cannot find candidate regions which might contain a CNV (or if not cells are attached to the root), return now
         if (tree_name!="") best_tree.to_dot(tree_name+".gv");
@@ -62,6 +65,8 @@ Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
 
     if (tree_name!="") best_tree.to_dot(tree_name+"_noCNV.gv");
     // Find best tree with CNV
+    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting second phase (finding the best tree with CNV)."<<std::endl;
+    else std::cout<<"Starting second phase (finding the best tree with CNV)."<<std::endl;
     best_tree.allow_CNV();
     t = best_tree;
     t_prime = t;

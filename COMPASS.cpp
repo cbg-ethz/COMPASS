@@ -23,13 +23,14 @@ int main(int argc, char* argv[]){
     parameters.verbose=false;
     // Read command line arguments
     std::string input_file{};
-    int n_chains=8;
-    int chain_length=8000;
-    int burn_in = 4000;
-    double temperature=6;
+    int n_chains=4;
+    int chain_length=5000;
+    int burn_in = 1000;
+    double temperature=10;
     double betabin_overdisp = parameters.omega_het;
     bool use_CNV=true;
     bool apply_filter_regions = true;
+    bool output_simplified = true;
     std::string output{};
     data.sex = "female";
     //parameters.verbose=true;
@@ -67,6 +68,9 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"--sex")==0){
            data.sex= std::string(argv[i+1]);
         }
+        else if (strcmp(argv[i],"--prettyplot")==0){
+            if (strcmp(argv[i+1],"0")==0) output_simplified=false;
+        }
     }
 
     load_CSV(input_file,use_CNV,apply_filter_regions); 
@@ -89,13 +93,12 @@ int main(int argc, char* argv[]){
     best_trees.resize(n_chains);
     if (n_chains<omp_get_num_procs()) omp_set_num_threads(n_chains);
     else omp_set_num_threads(omp_get_num_procs());
-    omp_set_num_threads(1);
 
+    std::cout<<"Starting "<<std::to_string(n_chains)<< " MCMC chains in parallel"<<std::endl;
     #pragma omp parallel for
 	for (int i=0;i<n_chains;i++){
 		std::srand(i);
-        if (parameters.verbose) std::cout<<"Chain "<<i<<std::endl;
-		Inference infer{"",temperature};
+		Inference infer{"",temperature,i};
         best_trees[i] = infer.find_best_tree(use_CNV,chain_length,burn_in);
 		results[i]=best_trees[i].log_score;
 	}
@@ -107,7 +110,9 @@ int main(int argc, char* argv[]){
             best_score_index = i;
         }
 	}
-    best_trees[best_score_index].to_dot(output);
+    if (output_simplified) best_trees[best_score_index].to_dot_pretty(output);
+    else best_trees[best_score_index].to_dot(output);
+    std::cout<<"Completed ! The output was written to "<<output<< " in dot format. You can visualize it by running: dot -Tpng "<<output<<" -o output.png"<<std::endl;
 
 	return 0;
 }

@@ -569,13 +569,13 @@ void Tree::to_dot(std::string filename){
     out_file <<"digraph G{"<<std::endl;
     out_file <<"node [color=dimgray fontsize=24 fontcolor=black fontname=Helvetica penwidth=5];"<<std::endl;
     for (int i=1;i<n_nodes;i++){
-        std::cout<<i<< " is a child of "<<parents[i]<<std::endl;
+        if (parameters.verbose) std::cout<<i<< " is a child of "<<parents[i]<<std::endl;
         out_file<<parents[i]<<" -> "<<i<<" [color=dimgray penwidth=4 weight=2];"<<std::endl;
     }
 
     for (int i=0;i<n_nodes;i++){
         out_file<<i<<"[label=<"<<nodes[i]->get_label()<<">];"<<std::endl;
-        std::cout<<i<<": "<<nodes[i]->get_label()<<std::endl;
+        if (parameters.verbose) std::cout<<i<<": "<<nodes[i]->get_label()<<std::endl;
     }
 
     for (int k=0;k<n_nodes;k++){
@@ -598,13 +598,13 @@ void Tree::to_dot(std::string filename){
 
     out_file <<"}"<<std::endl;
     out_file.close();
-    std::cout<<"Node probabilities"<<std::endl;
+    if (parameters.verbose) std::cout<<"Node probabilities"<<std::endl;
     for (int n=0;n<n_nodes;n++){
-        std::cout<<n<<": "<<node_probabilities[n]<<std::endl;
+        if (parameters.verbose) std::cout<<n<<": "<<node_probabilities[n]<<std::endl;
     }
-    std::cout<<"Dropout rates"<<std::endl;
+    if (parameters.verbose) std::cout<<"Dropout rates"<<std::endl;
     for (int i=0;i<n_loci;i++){
-        std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
+        if (parameters.verbose) std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
     }
     
 }
@@ -619,7 +619,7 @@ void Tree::to_dot_pretty(std::string filename){
     out_file <<"digraph G{"<<std::endl;
     out_file <<"node [color=dimgray fontsize=24 fontcolor=black fontname=Helvetica penwidth=5];"<<std::endl;
     for (int i=1;i<n_nodes;i++){
-        std::cout<<i<< " is a child of "<<parents[i]<<std::endl;
+        if (parameters.verbose) std::cout<<i<< " is a child of "<<parents[i]<<std::endl;
         out_file<<parents[i]<<" -> "<<i<<" [color=dimgray penwidth=4 weight=2];"<<std::endl;
     }
 
@@ -663,13 +663,13 @@ void Tree::to_dot_pretty(std::string filename){
 
     out_file <<"}"<<std::endl;
     out_file.close();
-    std::cout<<"Node probabilities"<<std::endl;
+    if (parameters.verbose) std::cout<<"Node probabilities"<<std::endl;
     for (int n=0;n<n_nodes;n++){
-        std::cout<<n<<": "<<node_probabilities[n]<<std::endl;
+        if (parameters.verbose) std::cout<<n<<": "<<node_probabilities[n]<<std::endl;
     }
-    std::cout<<"Dropout rates"<<std::endl;
+    if (parameters.verbose) std::cout<<"Dropout rates"<<std::endl;
     for (int i=0;i<n_loci;i++){
-        std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
+        if (parameters.verbose) std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
     }
     
 }
@@ -733,8 +733,25 @@ Tree::Tree(std::string gv_file, bool use_CNV_arg): //Create tree from a graphviz
             if (line[idx]=='>') finished_reading_line=true;
             while (!finished_reading_line){
                 if (line[idx]=='<') idx+=3; // remove <B>
-                if (line[idx]=='C' && line[idx+2]=='L'){ // CNLOH event
+                if ((line[idx]=='C' && line[idx+2]=='L')){ // CNLOH event
                     idx+=6;
+                    int idx2 = idx+1;
+                    while (line[idx2]!=':') idx2++;
+                    int region = stoi(line.substr(idx,idx2-idx));
+                    idx2++;
+                    while (line[idx2]!=':') idx2++; // skip region name
+                    idx = idx2+1;
+                    std::vector<int> lost_alleles{};
+                    while (line[idx]!='<' && line[idx]!='b' && line[idx]!='/'){
+                        if (line[idx]=='0') lost_alleles.push_back(0);
+                        else lost_alleles.push_back(1);
+                        idx+=2;
+                    }
+                    idx--;
+                    nodes[node]->add_CNLOH(std::make_pair(region,lost_alleles));
+                }
+                else if ((line[idx]=='L' && line[idx+2]=='O')){ // CNLOH event
+                    idx+=4;
                     int idx2 = idx+1;
                     while (line[idx2]!=':') idx2++;
                     int region = stoi(line.substr(idx,idx2-idx));
@@ -885,7 +902,7 @@ void Tree::find_CNV(){
     }
 }
 
-bool Tree::select_regions(){
+bool Tree::select_regions(int index){
     // Find regions which might contain a CNV event. Return true if it was possible to estimate node regions (if the node contains enough cells), false otherwise.
     candidate_regions.clear();
     region_probabilities.resize(n_regions);
@@ -900,7 +917,11 @@ bool Tree::select_regions(){
                 nodes_regionprobs[best_attachments[j]].push_back(1.0*cells[j].region_counts[k] / cells[j].total_counts);
             }
         }
-        if (nodes_regionprobs[0].size()<std::max(40.0,0.015*n_cells)) return false; // not enough cells attached to the root: cannot find CNVs
+        if (nodes_regionprobs[0].size()<std::max(40.0,0.015*n_cells)){
+            if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+            std::cout<<"In the tree inferred without CNVs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNVs."<<std::endl;
+            return false; // not enough cells attached to the root: cannot find CNVs
+        }
         double rootprob=0;
         for (double prob: nodes_regionprobs[0]){
             rootprob+= prob / nodes_regionprobs[0].size();
@@ -920,7 +941,11 @@ bool Tree::select_regions(){
             }
         }
     }
-    if (candidate_regions.size()==0) return true;
+    if (candidate_regions.size()==0){
+        if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+        std::cout<<"In the tree inferred without CNVs, there were no regions whose coverage in one node were different from the root, so COMPASS could not identify any CNVs."<<std::endl;
+        return false;
+    }
 
 
     regions_successor = std::vector<int>(n_regions,-1);
@@ -931,8 +956,9 @@ bool Tree::select_regions(){
             regions_successor[k1]=k2;
         }
     }
-    if (parameters.verbose){
-        std::cout<<"Potential CNV regions: ";
+    if (true || parameters.verbose){
+        if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+        std::cout<<"After the first phase (inferring the best tree without CNVs), COMPASS identified the following candidate regions which might contain CNVs: ";
         for (int i: candidate_regions){
             std::cout<<data.region_to_name[i]<<",";
         }

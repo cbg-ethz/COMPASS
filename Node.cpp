@@ -509,7 +509,9 @@ std::string Node::get_label_simple(std::set<int> excluded_mutations){
     }
     for (std::pair<int,std::vector<int>> CNLOH: CNLOH_events){
         int region = CNLOH.first;
-        label+= "<B>CNLOH "  +data.region_to_name[region] + "(chr"+data.region_to_chromosome[region]+ "):";
+        if (data.region_is_reliable[region]) label+= "<B>CNLOH "  +data.region_to_name[region] + "(chr"+data.region_to_chromosome[region]+ "):";
+        else label+= "<B>LOH "  +data.region_to_name[region] + "(chr"+data.region_to_chromosome[region]+ "):";
+        // When a region was excluded from the CNV inferencem we do not know if a LOH is copy-neutral or not.
         for (int i=0;i<CNLOH.second.size();i++){
             if (CNLOH.second[i]==0) label+="REF";
             else label+="ALT";
