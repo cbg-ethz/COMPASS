@@ -5,7 +5,7 @@ The dependencies required to run the script can be installed by running:
 
 `pip install numpy pandas loompy varcode`
 
-`ppyensembl install --release 75 76`
+`pyensembl install --release 75 76`
 
 ## Usage
 
