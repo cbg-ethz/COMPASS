@@ -21,7 +21,7 @@ Optional arguments:
 
 ## Whitelist
 
-In case, you already know which mutations to include in the analysis, the list of mutations can be passed as the whitelist argument (see `mutations.csv`) as an example. Otherwise, the script will attempt to select somatic variants present in some cells but not others, as well as germline variants that might be affected by LOH.
+In case, you already know which mutations to include in the analysis, the list of mutations can be passed as the whitelist argument (see `mutations.csv` as an example). Otherwise, the script will attempt to select somatic variants present in some cells but not others, as well as germline variants that might be affected by LOH.
 
 ## Population Frequency
 
