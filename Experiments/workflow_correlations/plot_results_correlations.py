@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-df = pd.read_csv("COMPASS/Experiments/workflow_correlations/results_correlations.csv")
+df = pd.read_csv("Experiments/workflow_correlations/results_correlations.csv")
 sns.set(font="Helvetica",font_scale=1.4)
 g = sns.catplot(x="corr", y="MP3",hue="method",\
     data=df, kind="box",\

@@ -154,8 +154,8 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs, \
     #np.savetxt(basename+"_regions.csv",regions.astype(int),delimiter=",",fmt='%i')
 
     #Input for BiTSC2
-    #np.savetxt(basename+"_DP.csv",regions.astype(int),delimiter=",",fmt='%i')
-    #np.savetxt(basename+"_AD.csv",alt_reads.astype(int),delimiter=",",fmt='%i')
+    np.savetxt(basename+"_DP.csv",regions.astype(int),delimiter=",",fmt='%i')
+    np.savetxt(basename+"_AD.csv",alt_reads.astype(int),delimiter=",",fmt='%i')
 
     # Save tree structure, with dropout rates and node probabilities
     parents_array = np.array(parents)

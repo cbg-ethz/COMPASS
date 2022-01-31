@@ -1,21 +1,29 @@
-# This script converts the true tree (in gv format), the tree inferred by COMPASS (gv) and the tree inferred by BITSC² to the format required
-# by the tool that computes the Bourque distance.
-
 import argparse
 import os
 import numpy as np
 import pandas as pd
 import copy
 
+
+def map_SNV_regions(filename):
+    SNV_to_region = []
+    with open(filename,"r") as f:
+        tmp = f.readline()
+        for line in f:
+            linesplit = line.split(",")
+            region = int(linesplit[1].lstrip("Region"))
+            SNV_to_region.append(region)
+    return SNV_to_region
+
+
 def remove_empty_nodes(tree):
-    if len(tree["SNVs"][0])==0 and len(tree["CNVs"][0])==0:
-        tree["SNVs"][0].append(0)
+    if len(tree["muts"][0])==0 and len(tree["CNVs"][0])==0:
+        tree["muts"][0].append(0)
     node = 1
     size=len(tree["parents"])
     while node < size:
-        print("node "+str(node))
-        if len(tree["SNVs"][node])==0 and len(tree["CNVs"][node])==0:
-            del tree["SNVs"][node]
+        if len(tree["muts"][node])==0 and len(tree["CNVs"][node])==0:
+            del tree["muts"][node]
             del tree["CNVs"][node]
             parent = tree["parents"][node]
             del tree["parents"][node]
@@ -52,8 +60,9 @@ def read_tree_gv(filename):
         if tree["parents"]==[]: tree["parents"] = [-1]
         
         # Read node labels
-        tree["SNVs"] = [[] for x in tree["parents"]]
+        tree["muts"] = [[] for x in tree["parents"]]
         tree["CNVs"] = [[] for x in tree["parents"]]
+        tree["CNLOHs"] = [[] for x in tree["parents"]]
         tree["n_muts"]=0
         finished_reading_labels=False
         while not finished_reading_labels:
@@ -72,11 +81,12 @@ def read_tree_gv(filename):
                         tree["CNVs"][node].append((region,sign))
 
                     elif event[:3]=="CNL":
-                        pass
+                        region = int(event[5:event.find(":")])+1
+                        tree["CNLOHs"][node].append(region)
                     else:
                         end = event.find(":")
                         if end>0:
-                            tree["SNVs"][node].append(int(event[:end])+1)
+                            tree["muts"][node].append(int(event[:end])+1)
                             tree["n_muts"]+=1
                         else:
                             pass
@@ -94,7 +104,10 @@ def read_tree_gv(filename):
     remove_empty_nodes(tree)
     return tree
 
+
+
 def read_tree_BITSC2(basename):
+    SNV_to_region = map_SNV_regions(basename+"_variants.csv")
     tree={}
     with open(basename+"_treeBITSC2.csv","r") as file:
         parents=[]
@@ -102,24 +115,28 @@ def read_tree_BITSC2(basename):
             parents.append(int(line)-1)
         tree["parents"] = parents
     n_nodes = len(tree["parents"])
-    tree["SNVs"] = [[] for i in range(n_nodes)]
+
+    tree["muts"] = [[] for i in range(n_nodes)]
     tree["CNVs"]=[[] for i in range(n_nodes)]
     mut = 1
+    regions_with_CNV = set()
     with open(basename+"_originsBITSC2.csv","r") as file:
         for line in file:
             linesplit = line.split(" ")
             node = int(linesplit[0]) -1
-            tree["SNVs"][node].append(mut)
+            tree["muts"][node].append(mut)
             nodeCNV= int(linesplit[2]) -1
             sign = np.sign(float(linesplit[3]))
             if sign!=0:
-                tree["CNVs"][nodeCNV].append((mut,sign))
+                region = SNV_to_region[mut-1]+1
+                if not region in regions_with_CNV: # each region can only contain one CNV
+                    tree["CNVs"][nodeCNV].append((region,sign))
+                    regions_with_CNV.add(region)
             mut+=1
         tree["n_muts"]=mut
-    print("B3")
     remove_empty_nodes(tree)
-    print("B4")
     return tree
+
 
 
 def count_FP_TN(treeTRUE,treeINFERRED):
@@ -137,7 +154,7 @@ def count_FP_TN(treeTRUE,treeINFERRED):
         if not CNV in true_CNVs:
             false_positives+=1
     n_regions = 0
-    for SNVs in treeTRUE["SNVs"]:
+    for SNVs in treeTRUE["muts"]:
         for SNV in SNVs:
             n_regions = max(n_regions,SNV+1)
     for i in range(n_regions):
@@ -173,23 +190,23 @@ def count_TP_FN(treeTRUE,treeINFERRED):
     return (true_positives,false_negatives)
 
 def is_SNVsupported(node,tree,nodes_genotypes,setNodes):
-    if len(tree["SNVs"][node])>0:
+    if len(tree["muts"][node])>0:
         setNodes.add(node)
     for CNV in tree["CNVs"][node]:
         locus,sign = CNV
         if sign == -1 and locus in nodes_genotypes[node]: # CNV results in LOH
             setNodes.add(node)
     
-    for n in range(len(tree["SNVs"])):
+    for n in range(len(tree["muts"])):
         if tree["parents"][n]==node:
             is_SNVsupported(n,tree,nodes_genotypes,setNodes)
             if n in setNodes:
                 setNodes.add(node)
 
 def rec_genotypes(node,tree,nodes_genotypes):
-    for SNV in tree["SNVs"][node]:
+    for SNV in tree["muts"][node]:
         nodes_genotypes[node].add(SNV)
-    for n in range(len(tree["SNVs"])):
+    for n in range(len(tree["muts"])):
         if tree["parents"][n]==node:
             nodes_genotypes[n] = nodes_genotypes[node].copy()
             rec_genotypes(n,tree,nodes_genotypes)
@@ -267,9 +284,7 @@ def compute_error_rates(basename,nseeds,output):
         try:
             tree_true = read_tree_gv(basename+"_"+str(s)+"_treeTRUE.gv")
             tree_COMPASS = read_tree_gv(basename+"_"+str(s)+"_treeCOMPASS.gv")
-            print("b")
             tree_BITSC2 = read_tree_BITSC2(basename+"_"+str(s))
-            print("c")
             FP,TN = count_FP_TN(tree_true,tree_COMPASS)
             false_positives+=FP
             true_negatives+=TN
@@ -302,12 +317,14 @@ def compute_error_rates(basename,nseeds,output):
         outfile.write("FPR COMPASS " + str(false_positives / (false_positives + true_negatives)) + "\n")
         outfile.write("FNR COMPASS " + str(false_negatives / (false_negatives + true_positives)) + "\n")
         outfile.write("FNR supported COMPASS " + str(false_negatives_supported / (false_negatives_supported + true_positives_supported)) + "\n")
-        outfile.write("FNR unsupported COMPASS " + str(false_negatives_unsupported / (false_negatives_unsupported + true_positives_unsupported)) + "\n")
+        if (false_negatives_unsupported + true_positives_unsupported) >0:
+            outfile.write("FNR unsupported COMPASS " + str(false_negatives_unsupported / (false_negatives_unsupported + true_positives_unsupported)) + "\n")
 
         outfile.write("FPR BITSC2 " + str(Bfalse_positives / (Bfalse_positives + Btrue_negatives)) + "\n")
         outfile.write("FNR BITSC2 " + str(Bfalse_negatives / (Bfalse_negatives + Btrue_positives)) + "\n")
         outfile.write("FNR supported BITSC2 " + str(Bfalse_negatives_supported / (Bfalse_negatives_supported + Btrue_positives_supported)) + "\n")
-        outfile.write("FNR unsupported BITSC2 " + str(Bfalse_negatives_unsupported / (Bfalse_negatives_unsupported + Btrue_positives_unsupported)) + "\n")
+        if (Bfalse_negatives_unsupported + Btrue_positives_unsupported):
+            outfile.write("FNR unsupported BITSC2 " + str(Bfalse_negatives_unsupported / (Bfalse_negatives_unsupported + Btrue_positives_unsupported)) + "\n")
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()

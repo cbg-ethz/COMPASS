@@ -3,7 +3,7 @@ import pandas as pd
 
 seeds = list(range(100))
 n_cells = 5000
-n_SNVs= [3,5,8]
+n_SNVs= [5,10,20]
 dropout_rates=[0.04,0.07,0.10]
 dropout_sigma= 0.0
 nodeprob_concentration=[0.1,0.2,0.3,0.4,0.5,0.6] 
@@ -112,23 +112,23 @@ rule generate_synthetic_data:
 rule infer_tree_COMPASS:
     params:
         threads="4",
-        runtime="1:50",
+        runtime="3:50",
         memory="2000"
     input:
         tmpdir+"{sample}_variants.csv",
     output:
         outdir+"{sample}_treeCOMPASS.gv"
     shell:
-        "./COMPASS -o {output} -i {tmpdir}{wildcards.sample} --nchains 4 --chainlength 3000 --burnin 50000 --temperature 10 --CNV 0 -d 0"
+        "./COMPASS -o {output} -i {tmpdir}{wildcards.sample} --nchains 4 --chainlength 10000 --burnin 50000 --temperature 10 --CNV 0 -d 0 --prettyplot 0"
 
 rule infer_tree_SCITE:
     params:
         threads="1",
-        runtime="10",
+        runtime="60",
         memory="2000"
     input:
         tmpdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_genotypes.csv"
     output:
         outdir+"syn_{nSNVs}SNVs_{mu}dropoutrate_{nodeprobconcentration}nodeprob_{seed}_map0.gv"
     shell:
-        "./scite -i {input} -o {outdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed} -n {wildcards.nSNVs} -m {n_cells} -r 4 -l 5000 -fd 0.01 -ad {wildcards.mu} {wildcards.mu} -cc 0.01 -s"
+        "./scite -i {input} -o {outdir}syn_{wildcards.nSNVs}SNVs_{wildcards.mu}dropoutrate_{wildcards.nodeprobconcentration}nodeprob_{wildcards.seed} -n {wildcards.nSNVs} -m {n_cells} -r 4 -l 10000 -fd 0.01 -ad {wildcards.mu} {wildcards.mu} -cc 0.01 -s"

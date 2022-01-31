@@ -4,15 +4,15 @@ import pandas as pd
 seeds = list(range(100))
 nseeds = len(seeds)
 n_cells_COMPASS=2000
-n_cells_BITSC2=100
-n_nodes = [4,6,8]
+n_cells_BITSC2=500
+n_nodes = [6]
 n_regions = 20 
-n_SNVs= [7,20,50]
-n_CNVs= [0,3,8]
+n_SNVs= [20]
+n_CNVs= [3]
 n_CNLOHs = [2]
 dropout_sigma= 0.0
 nodeprob_concentration= 10
-regionprobs_sigma = [0.0,0.1,0.3,0.5,0.7] 
+regionprobs_sigma = [0.0,0.1,0.3,0.5,0.7] # 0.0,0.1,0.3,0.5,0.7
 theta = 1000
 depth=20
 
@@ -25,8 +25,7 @@ rule all:
         runtime="10",
         memory="1000"
     input:
-        "results_BITSC2.csv",
-        "error_statistics.csv"
+        "results_BITSC2_200.csv"
 
 
 rule combine_results:
@@ -37,7 +36,7 @@ rule combine_results:
     input:
         expand(outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_MP3.txt", nnodes=n_nodes,nSNVs=n_SNVs,nCNVs=n_CNVs,nCNLOHs=n_CNLOHs,rhosig=regionprobs_sigma,seed=seeds)
     output:
-        "results_BITSC2.csv"
+        "results_BITSC2_200.csv"
     run:
         d={"nodes":[],"SNVs":[],"CNVs":[],"CNLOHs":[],"rho":[],"method":[],"MP3":[]}
         for infile in input:
@@ -65,36 +64,7 @@ rule combine_results:
             d["method"].append("BITSC2")
             d["MP3"].append(result_BITSC2)
         df = pd.DataFrame(d)
-        df.to_csv("results_BITSC2.csv",index=False)
-
-rule cp_error_stats:
-    params:
-        threads="1",
-        runtime="10",
-        memory="1000"
-    input:
-        outdir+"syn_8nodes_7SNVs_3CNVs_2CNLOHs_0.5rhosigma_error_statistics.txt"
-    output:
-        "error_statistics.csv"
-    shell:
-        "cp {input} {output}"
-
-rule compute_error_rates:
-    params:
-        threads="1",
-        runtime="10",
-        memory="1000"
-    input:
-        expand(outdir+"{{sample}}_{seed}_treeTRUE.gv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_treeCOMPASS.gv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_treeBITSC2.csv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_originsBITSC2.csv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_variants.csv",seed=seeds)
-    output:
-        outdir+"{sample}_error_statistics.txt"
-    shell:
-        "python compute_error_stats.py -i {outdir}{wildcards.sample} --nseeds {nseeds} -o {output}"
-
+        df.to_csv("results_BITSC2_500.csv",index=False)
 
 
 rule compute_MP3:
@@ -160,7 +130,7 @@ rule infer_tree_COMPASS:
 
 rule infer_tree_BITSC2:
     params:
-        runtime="38:00",
+        runtime="32:00",
         threads="1",
         memory="6000"
     input:

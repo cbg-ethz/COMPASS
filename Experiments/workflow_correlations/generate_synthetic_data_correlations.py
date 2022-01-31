@@ -5,8 +5,9 @@ import pandas as pd
 from scipy.stats import nbinom, betabinom
 
 
-def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,\
-                    sequencing_depth,theta=10000,regionprob_sigma=0,correlation=0.0,seed=0):
+def generate_data(basename,n_nodes,n_cells,n_regions, n_SNVs,n_CNVs, n_CNLOHs, \
+                    nodeprobs_concentration,dropout_rate_avg,dropout_rate_sigma,\
+                    sequencing_depth,theta=10000,regionprob_sigma=0,seed=0,correlation=0):
     np.random.seed(seed)
     sequencing_error_rate = 0.01
     # Generate the tree structure
@@ -34,13 +35,22 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
         DFT_order.append(top)
         for child in children[top]: stack.append(child)
 
+
+    # Assign SNVs to regions
+    SNV_to_region = sorted(list(np.random.randint(0,n_regions,n_SNVs)))
+    region_to_SNVs = [ [] for i in range(n_regions)]
+    for i in range(n_SNVs):
+        region_to_SNVs[SNV_to_region[i]].append(i)
+
+
     # Add somatic events to the nodes
     SNVs = [[] for x in range(n_nodes)]
     CNVs = [[] for x in range(n_nodes)] # each CNV is a triplet (region,gain_loss,alleles)
+    CNLOHs = [[] for x in range(n_nodes)] # each CNLOH is a pair (region,alleles)
 
     # Assign events to nodes
     # Each node must have at least one event (SNV or CNV)
-    nodes = list(range(1,n_nodes)) + list(np.random.choice(range(1,n_nodes),n_SNVs+n_CNVs - n_nodes+1,replace=True))
+    nodes = list(range(1,n_nodes)) + list(np.random.choice(range(1,n_nodes),n_SNVs+n_CNVs-n_nodes+1,replace=True))
     np.random.shuffle(nodes)
     
     # SNVs
@@ -48,33 +58,59 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
         SNVs[nodes[i]].append(i)
     for n in range(n_nodes):
         SNVs[n] = sorted(SNVs[n])
+
+    def mut_in_ancestors(SNV,node):
+        if SNV in SNVs[node]: return True
+        elif node<=0: return False
+        else: return mut_in_ancestors(SNV,parents[node])
+
     # CNVs
-    loci_with_CNV = sorted(np.random.choice(n_SNVs,n_CNVs,replace=False))
+    regions_with_CNV = sorted(np.random.choice(n_regions,n_CNVs,replace=False))
     for i in range(n_CNVs):
         n = nodes[n_SNVs+i]
         loss_gain = np.random.choice([-1,1])
-        allele = 0
+        region = regions_with_CNV[i]
+        alleles = []
+        # CNVs can only affect alleles present in this node.
+        for snv in region_to_SNVs[region]:
+            if mut_in_ancestors(snv,parents[n]): alleles.append(np.random.randint(0,2))
+            else: alleles.append(0)
 
-        locus = loci_with_CNV[i]
-        mut_in_ancestor = False
-        ancestor = n
-        while ancestor>=0:
-            mut_in_ancestor = mut_in_ancestor or (locus in SNVs[ancestor])
-            ancestor = parents[ancestor]
-        allele = 0
-        if mut_in_ancestor:
-            allele = np.random.choice([0,1])
+        CNVs[n].append( (region , loss_gain , alleles) )
 
-        CNVs[n].append( (locus , loss_gain , allele) )
+    # CNLOH can only affect regions containing SNVs.
+    regions_with_SNV = []
+    for k in range(n_regions):
+        if len(region_to_SNVs[k])>0 and (not k in regions_with_CNV): regions_with_SNV.append(k)
 
+    n_CNLOHs = min(n_CNLOHs,len(regions_with_SNV))
     
-    
+    regions_with_CNLOH = sorted(np.random.choice(regions_with_SNV,n_CNLOHs,replace=False))
+    for i in range(n_CNLOHs):
+        region = regions_with_CNLOH[i]
+        possible_nodes = [] # Can only add the CNLOH event to a node that has a mutated allele for one of the SNVs in the region
+        for n in range(1,n_nodes):
+            OneSNV_in_ancestors = False
+            for mut in region_to_SNVs[region]:
+                OneSNV_in_ancestors = OneSNV_in_ancestors or mut_in_ancestors(mut,n)
+            if OneSNV_in_ancestors: possible_nodes.append(n)
+        if len(possible_nodes)>0:
+            node = np.random.choice(possible_nodes)
+            alleles = []
+            for snv in region_to_SNVs[region]:
+                 # SNV followed by a CNLOH in the next node can also be explained by two parallel branches without CNLOH, so we exclude this case
+                if mut_in_ancestors(snv,parents[node]) and len(children[parents[node]])>1: alleles.append(np.random.randint(0,2))
+                elif mut_in_ancestors(snv,parents[parents[node]]): alleles.append(np.random.randint(0,2))
+                else: alleles.append(0)
+            CNLOHs[node].append((region,alleles))
 
     # Compute the genotypes of each node
+    cn_regions = 2*np.ones((n_regions,n_nodes),dtype=int)
     n_ref_allele = 2*np.ones((n_SNVs,n_nodes),dtype=int)
     n_alt_allele =  np.zeros((n_SNVs,n_nodes),dtype=int)
     for n in DFT_order:
         if n!=0:
+            cn_regions[:,n] = cn_regions[:,parents[n]] 
             n_ref_allele[:,n] = n_ref_allele[:,parents[n]]
             n_alt_allele[:,n] = n_alt_allele[:,parents[n]]
         for mut in SNVs[n]:
@@ -82,50 +118,67 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
                 n_ref_allele[mut,n]-=1
                 n_alt_allele[mut,n]+=1
         for CNV in CNVs[n]:
-            locus,gain_loss,allele = CNV
-            if allele==0:
-                n_ref_allele[locus,n]+=gain_loss
-            else:
-                if n_alt_allele[locus,n]==0:
-                    raise Exception("Invalid CNV: affects the alt allele, but its copy number before CNV is 0")
-                n_alt_allele[locus,n]+=gain_loss
-            if (n_ref_allele[locus,n]<0 or n_alt_allele[locus,n]<0):
+            region,gain_loss,alleles = CNV
+            cn_regions[region,n] +=gain_loss
+            for i in range(len(alleles)):
+                if alleles[i]==0:
+                    n_ref_allele[region_to_SNVs[region][i],n]+=gain_loss
+                else:
+                    if n_alt_allele[region_to_SNVs[region][i],n]==0:
+                        raise Exception("Invalid CNV: affects the alt allele, but its copy number before CNV is 0")
+                    n_alt_allele[region_to_SNVs[region][i],n]+=gain_loss
+
+
+            if len(alleles)>0 and (n_ref_allele[region_to_SNVs[region][0],n]<0 or n_alt_allele[region_to_SNVs[region][0],n]<0):
                 raise Exception("Invalid CNV: copy number of one allele < 0.")
+            if len(alleles)>0 and (n_ref_allele[region_to_SNVs[region][0],n]+n_alt_allele[region_to_SNVs[region][0],n]!=cn_regions[region,n]):
+                raise Exception("Copy number of region does not match copy number of locus.")
+        
+        for CNLOH in CNLOHs[n]:
+            region,alleles = CNLOH
+            for i in range(len(alleles)):
+                if n_alt_allele[region_to_SNVs[region][i],n]==0 and alleles[i]==1:
+                        raise Exception("Invalid CNLOH: node is homozygous ref for this variant")
+                if alleles[i]==0:
+                    n_ref_allele[region_to_SNVs[region][i],n]-=1
+                    n_alt_allele[region_to_SNVs[region][i],n]+=1
+                else:
+                    n_ref_allele[region_to_SNVs[region][i],n]+=1
+                    n_alt_allele[region_to_SNVs[region][i],n]-=1
+
 
 
     # Sample node probabilities
     node_probabilities = np.random.dirichlet([nodeprobs_concentration]*n_nodes) 
     # Sample dropout rates
     dropout_rates = np.abs(np.random.normal(dropout_rate_avg,dropout_rate_sigma,n_SNVs))
-
-    # Region probabilities: mean and covariance matrix
-    region_probabilities = np.abs(np.random.normal(1,regionprob_sigma,n_SNVs))
+    # Sample region probabilities
+    region_probabilities = np.abs(np.random.normal(1,regionprob_sigma,n_regions))
     region_probabilities = [max(0.3,x) for x in region_probabilities]
 
     n_clusters = np.random.randint(2,5)
-    cluster_assignments = np.random.randint(0,n_clusters,n_SNVs)
-    covariance_regions = np.eye(n_SNVs)
-    for i in range(n_SNVs):
-        for j in range(n_SNVs):
+    cluster_assignments = np.random.randint(0,n_clusters,n_regions)
+    covariance_regions = np.eye(n_regions)
+    for i in range(n_regions):
+        for j in range(n_regions):
             if i!=j and cluster_assignments[i]==cluster_assignments[j]:
                 covariance_regions[i,j] = correlation
 
     # Assign cells to nodes and generate read counts
-    ref_reads =  np.zeros((n_SNVs,n_cells),dtype=int)
-    alt_reads =  np.zeros((n_SNVs,n_cells),dtype=int)
-    tot_reads = np.zeros((n_SNVs,n_cells),dtype=int)
+    depths = np.zeros((n_regions,n_cells),dtype=int)
+    ref_reads = np.zeros((n_SNVs,n_cells),dtype=int)
+    alt_reads = np.zeros((n_SNVs,n_cells),dtype=int)
     for j in range(n_cells):
         node = int(np.random.choice(n_nodes, p=node_probabilities))
-        means = np.zeros(n_SNVs)
+        means = np.zeros(n_regions)
+        for k in range(n_regions):
+            means[k] = region_probabilities[k] * cn_regions[k,n] /2.0 * sequencing_depth
+        nreads = np.random.multivariate_normal(means,covariance_regions)
+
         for i in range(n_SNVs):
-            means[i] = region_probabilities[i] * (n_ref_allele[i,node]+n_alt_allele[i,node]) /2.0 * sequencing_depth
-        depths = np.random.multivariate_normal(means,covariance_regions)
-        for i in range(n_SNVs):
-            depth = round(depths[i])
+            depth = round(nreads[SNV_to_region[i]])
             if depth < 0: depth=0
-            tot_reads[i,j] = depth
-        for i in range(n_SNVs):
-            depth = tot_reads[i,j]
+            depths[i,j] = depth
             c_r=0 # number of copies of the ref allele that did not get dropped out
             c_a=0 # number of copies of the alt allele that did not get dropped out
             for x in range(n_ref_allele[i,node]):
@@ -139,7 +192,7 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
                 elif n_ref_allele[i,node]>0: c_r+=1
                 else: c_a+=1
             f = c_a / (c_r+c_a) * (1-sequencing_error_rate) + c_r/(c_r+c_a) * sequencing_error_rate
-            omega=1000 
+            omega=1000 # high omega --> beta binomial ~= binomial
             a = f*omega
             b = (1-f)*omega
             alt_reads[i,j] = betabinom.rvs(depth,a,b)
@@ -153,9 +206,9 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
         os.makedirs(directory)
 
     d={}
-    d["CHR"] = list(range(n_SNVs))
-    d["REGION"] = ["Region"+str(x) for x in range(n_SNVs)]
-    d["NAME"] = ["Mut"+str(x) for x in range(n_SNVs)]
+    d["CHR"] = [str(SNV_to_region[snv]) for snv in range(n_SNVs)]
+    d["REGION"] = ["Region"+str(SNV_to_region[snv]) for snv in range(n_SNVs)]
+    d["NAME"] = ["SNV"+str(snv) for snv in range(n_SNVs)]
     for j in range(n_cells):
         d[j]=[]
     for i in range(n_SNVs):
@@ -164,8 +217,40 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
     df_variants = pd.DataFrame(d)
     df_variants.to_csv(basename+"_variants.csv",index=False)
 
-    df_regions = pd.DataFrame(tot_reads,index = [str(i)+"_Region"+str(i) for i in range(n_SNVs)]).astype(int)
+    
+    
+    regions = np.array(depths)
+    df_regions = pd.DataFrame(regions,index = [str(i)+"_Region"+str(i) for i in range(n_regions)]).astype(int)
     df_regions.to_csv(basename+"_regions.csv",index=True,header=False)
+
+    # Input for BiTSC2
+    DP=[]
+    for i in range(n_SNVs):
+        l=[]
+        for j in range(n_cells):
+            l.append(ref_reads[i,j]+alt_reads[i,j])
+        DP.append(l)
+    DP = np.array(DP)
+    np.savetxt(basename+"_DP.csv",DP.astype(int),delimiter=",",fmt='%i')
+    np.savetxt(basename+"_AD.csv",alt_reads.astype(int),delimiter=",",fmt='%i')
+
+    # Create genomic segments for BITSC2
+    segments = []
+    start_region = 0
+    end_region = 0
+    while end_region < n_SNVs:
+        if end_region==n_SNVs-1 or SNV_to_region[start_region] !=SNV_to_region[end_region+1]:
+            segments.append((start_region+1,end_region+1))
+            start_region = end_region+1
+            end_region = start_region
+        else:
+            end_region+=1
+    np.savetxt(basename+"_segments.csv",np.array(segments).astype(int),delimiter=",",fmt='%i')
+
+
+
+
+
 
     # Save tree structure, with dropout rates and node probabilities
     parents_array = np.array(parents)
@@ -179,14 +264,16 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
         for n in range(n_nodes):
             label = str(n)+"[label=<"
             for mut in SNVs[n]:
-                label+=str(mut)+":Mut"+str(mut)+"<br/>"
+                label+=str(mut)+":SNV"+str(mut)+"<br/>"
             for CNV in CNVs[n]:
                 label+="CNV"
                 if CNV[1]>0: label+="+1"
                 else: label+="-1"
-                label+=" "+str(CNV[0])+":"+str(CNV[2])+"<br/>"
+                label+= " "+str(CNV[0])+":"+  ",".join([str(x) for x in CNV[2]]) + "<br/>"
+            for CNLOH in CNLOHs[n]:
+                label+="CNLOH " + str(CNLOH[0])+":" + ",".join([str(x) for x in CNLOH[1]]) + "<br/>"
 
-            if len(SNVs[n])==0 and len(CNVs[n])==0: label+=" "
+            if len(SNVs[n])==0 and len(CNVs[n])==0 and len(CNLOHs[n])==0: label+=" "
             label+=">];\n"
             file.write(label)
         for n in range(n_nodes):
@@ -197,22 +284,22 @@ def generate_data(basename,n_nodes,n_cells,n_SNVs,n_CNVs,nodeprobs_concentration
                                     +" height="+str(size)+" color="+colors[n%len(colors)]+"];\n")
         file.write("}")
 
-
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', type = str, help='Output basename')
     parser.add_argument('--seed', type = int, default=0, help='Random seed')
     parser.add_argument('--nnodes', type = int,default = 4, help='Number of nodes in the tree')
     parser.add_argument('--ncells', type = int,default = 2000, help='Number of cells')
-    parser.add_argument('--nSNVs', type = int,default = 6, help='Number of mutations')
+    parser.add_argument('--nregions', type = int,default = 50, help='Number of regions')
+    parser.add_argument('--nSNVs', type = int,default = 6, help='Number of SNVs')
     parser.add_argument('--nCNVs', type = int,default = 2, help='Number of CNVs')
+    parser.add_argument('--nCNLOHs', type = int,default = 0, help='Number of CNLOHs')
     parser.add_argument('--dropoutsigma', type = float,default = 0.03, help='Standard deviation when sampling the dropout rates')
     parser.add_argument('--regionprobsigma', type = float,default = 0.00, help='Standard deviation when sampling the region probabilities')
-    parser.add_argument('--theta', type = float,default = 10, help='Inverse overdispersion parameter for the negative binomial (when sampling the sequencing depth)')
-    parser.add_argument('--depth', type = int,default = 10, help='Sequencing depth')
-    parser.add_argument('--nodeprobconcentration', type=float, default=1,help='Concentration parameter of the dirichlet distribution when sampling the node probabilities.')
+    parser.add_argument('--theta', type = float,default = 100, help='Inverse overdispersion parameter for the negative binomial (when sampling the sequencing depth)')
+    parser.add_argument('--depth', type = int,default = 20, help='Sequencing depth')
+    parser.add_argument('--nodeprobconcentration', type=float, default=10,help='Concentration parameter of the dirichlet distribution when sampling the node probabilities.')
     parser.add_argument('--corr', type=float, default=0.0,help='Correlation coefficient between regions in the same cluster')
     args = parser.parse_args()
-    generate_data(args.o,n_nodes=args.nnodes,n_cells=args.ncells,n_SNVs=args.nSNVs,n_CNVs=args.nCNVs, nodeprobs_concentration=args.nodeprobconcentration,\
-        dropout_rate_avg=0.04,dropout_rate_sigma=args.dropoutsigma,seed=args.seed,sequencing_depth=args.depth,theta=args.theta,\
-        regionprob_sigma=args.regionprobsigma,correlation=args.corr)
+    generate_data(args.o,n_nodes=args.nnodes,n_cells=args.ncells,n_regions=args.nregions,n_SNVs=args.nSNVs,n_CNVs=args.nCNVs,n_CNLOHs=args.nCNLOHs,nodeprobs_concentration=args.nodeprobconcentration,\
+        dropout_rate_avg=0.04,dropout_rate_sigma=args.dropoutsigma,seed=args.seed,sequencing_depth=args.depth,theta=args.theta,regionprob_sigma=args.regionprobsigma,correlation=args.corr)

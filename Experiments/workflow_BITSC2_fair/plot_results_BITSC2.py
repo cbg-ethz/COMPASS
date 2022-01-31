@@ -3,17 +3,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
-df = pd.read_csv("Experiments/workflow_BITSC2/results_BITSC2_long.csv")
-#df=df[df["CNLOHs"]==0].reset_index()
+df = pd.read_csv("COMPASS/Experiments/workflow_BITSC2/results_BITSC2.csv")
 methodCNVs=[]
 for i in range(df.shape[0]):
     methodCNVs.append(df.loc[i,"method"]+"_"+str(df.loc[i,"CNVs"]) + "CNVs")
 df["methodsCNV"] = methodCNVs
 sns.set(font="Helvetica",font_scale=2.0)
-# hue_order=["COMPASS_0CNVs","COMPASS_1CNVs","COMPASS_3CNVs","BITSC2_0CNVs","BITSC2_1CNVs","BITSC2_3CNVs"],
-#  palette=["#ff9998","#f37676","#e72129","#aec6e6","#4c8fc1","#2276b1"],\
 g = sns.catplot(x="rho", y="MP3",hue="methodsCNV", col="nodes",row="SNVs",\
-    data=df, kind="box",hue_order=["COMPASS_0CNVs","COMPASS_3CNVs","COMPASS_8CNVs","BITSC2_0CNVs","BITSC2_3CNVs","BITSC2_8CNVs"],palette=["#ff9998","#f37676","#e72129","#aec6e6","#4c8fc1","#2276b1"],
+    data=df, kind="box",hue_order=["COMPASS_0CNVs","COMPASS_1CNVs","COMPASS_3CNVs","BITSC2_0CNVs","BITSC2_1CNVs","BITSC2_3CNVs"],\
+    palette=["#ff9998","#f37676","#e72129","#aec6e6","#4c8fc1","#2276b1"],\
     showmeans=True,meanprops={"markersize":10,"marker":"X"},
     margin_titles=False,legend=False,fliersize=2,height=3,aspect=1.7) # , height=4, aspect=.7
 g.set_axis_labels("Variance in coverage between regions","MP3 similarity to the true tree")
@@ -46,21 +44,21 @@ for AX in g.axes[2]:
             return "{:.1f}".format(label)
     AX.xaxis.set_major_formatter(plt.FuncFormatter(format_func))
 
-handles, labels = g.axes[0][0].get_legend_handles_labels()
+handles, labels = g.axes[0][1].get_legend_handles_labels()
 def sort_legends(key):
     name=key[0]
     print(name)
     if name=="COMPASS_0CNVs":
         return 0
-    elif name=="COMPASS_3CNVs":
+    elif name=="COMPASS_1CNVs":
         return 2
-    elif name=="COMPASS_8CNVs":
+    elif name=="COMPASS_3CNVs":
         return 4
     elif name=="BITSC2_0CNVs":
         return 1
-    elif name=="BITSC2_3CNVs":
+    elif name=="BITSC2_1CNVs":
         return 3
-    elif name=="BITSC2_8CNVs":
+    elif name=="BITSC2_3CNVs":
         return 5
     else:
         raise Exception("Invalid legend name")
