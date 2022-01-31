@@ -2,10 +2,13 @@ import numpy as np
 import pandas as pd
 
 seeds = list(range(100))
-n_cells = 4000
+n_cells_BITSC2 = 100
+n_cells_COMPASS = 2000
 n_nodes = [7]
+n_regions = 20
 n_muts= [12]
 n_CNVs= 3
+n_CNLOHs=0
 dropout_sigma= 0.0
 nodeprob_concentration= 10
 regionprobs_sigma = 0.3
@@ -39,15 +42,21 @@ rule combine_results:
         for infile in input.BD:
             with open(infile,"r") as f:
                 result_COMPASS = float(f.readline())
-            namesplit = infile.split("_")
-            N_nodes=int(namesplit[1][:-5])
-            N_muts=int(namesplit[2][:-4])
-            corr=float(namesplit[3][:-4])
-            d["nodes"].append(N_nodes)
-            d["muts"].append(N_muts)
-            d["corr"].append(corr)
-            d["method"].append("COMPASS")
-            d["MP3"].append(result_COMPASS)
+                result_BITSC2 = float(f.readline())
+                namesplit = infile.split("_")
+                N_nodes=int(namesplit[1][:-5])
+                N_muts=int(namesplit[2][:-4])
+                corr=float(namesplit[3][:-4])
+                d["nodes"].append(N_nodes)
+                d["muts"].append(N_muts)
+                d["corr"].append(corr)
+                d["method"].append("COMPASS")
+                d["MP3"].append(result_COMPASS)
+                d["nodes"].append(N_nodes)
+                d["muts"].append(N_muts)
+                d["corr"].append(corr)
+                d["method"].append("BITSC2")
+                d["MP3"].append(result_BITSC2)
         df = pd.DataFrame(d)
         df.to_csv("results_correlations.csv",index=False)
 
@@ -58,7 +67,10 @@ rule compute_MP3:
         memory="1000"
     input:
         outdir+"{sample}_treeTRUE.gv",
-        outdir+"{sample}_treeCOMPASS.gv"
+        outdir+"{sample}_treeCOMPASS.gv",
+        outdir+"{sample}_treeBITSC2.csv",
+        outdir+"{sample}_originsBITSC2.csv",
+        outdir+"{sample}_variants.csv"
     output:
         outdir+"{sample}_MP3.txt"
     shell:
@@ -74,10 +86,13 @@ rule generate_synthetic_data:
     output:
         tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_variants.csv",
         tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_regions.csv",
-        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_tree.gv"
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_tree.gv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_AD.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_{ncells}cells_{corr}corr_{seed}_segments.csv"
     shell:
         "python generate_synthetic_data_correlations.py -o {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{wildcards.ncells}cells_{wildcards.corr}corr_{wildcards.seed} "\
-        "--ncells {wildcards.ncells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nmuts} --nCNVs {n_CNVs} --corr {wildcards.corr} " \
+        "--ncells {wildcards.ncells} --nnodes {wildcards.nnodes} --nregions {n_regions} --nSNVs {wildcards.nmuts} --nCNVs {n_CNVs} --nCNLOHs {n_CNLOHs} --corr {wildcards.corr} " \
         "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --regionprobsigma {regionprobs_sigma} --seed {wildcards.seed}"
 
 rule cp_true_tree:
@@ -86,11 +101,13 @@ rule cp_true_tree:
         runtime="10",
         memory="1000"
     input:
-        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells)+"cells_{corr}corr_{seed}_tree.gv"
+        tree=tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{corr}corr_{seed}_tree.gv",
+        variants=tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{corr}corr_{seed}_variants.csv"
     output:
-        outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_treeTRUE.gv"
+        tree=outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_treeTRUE.gv",
+        variants=outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_variants.csv"
     shell: 
-        "cp {input} {output}"
+        "cp {input.tree} {output.tree}; cp {input.variants} {output.variants}"
 
 rule infer_tree_COMPASS:
     params:
@@ -98,9 +115,25 @@ rule infer_tree_COMPASS:
         runtime="1:50",
         memory="6000"
     input:
-        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells)+"cells_{corr}corr_{seed}_variants.csv",
-        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells)+"cells_{corr}corr_{seed}_regions.csv"
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{corr}corr_{seed}_variants.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_COMPASS)+"cells_{corr}corr_{seed}_regions.csv"
     output:
         outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_treeCOMPASS.gv"
     shell:
-        "./COMPASS -o {output} -i {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{n_cells}cells_{wildcards.corr}corr_{wildcards.seed} --nchains 4 --chainlength 10000 --burnin 2000 --temperature 10 -d 0 --filterregions 0"
+        "./COMPASS -o {output} -i {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{n_cells_COMPASS}cells_{wildcards.corr}corr_{wildcards.seed} --nchains 4 --chainlength 10000 --burnin 2000 --temperature 10 -d 0 --filterregions 0 --prettyplot 0"
+
+rule infer_tree_BITSC2:
+    params:
+        runtime="4:00",
+        threads="1",
+        memory="1000"
+    input:
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_BITSC2)+"cells_{corr}corr_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_BITSC2)+"cells_{corr}corr_{seed}_AD.csv",
+        tmpdir+"syn_{nnodes}nodes_{nmuts}muts_"+str(n_cells_BITSC2)+"cells_{corr}corr_{seed}_segments.csv"
+    output:
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_originsBITSC2.csv",
+        outdir+"syn_{nnodes}nodes_{nmuts}muts_{corr}corr_{seed}_treeBITSC2.csv"
+    shell:
+        "Rscript --vanilla BITSC2/code/BiTSC2_run_script.R {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{n_cells_BITSC2}cells_{wildcards.corr}corr_{wildcards.seed} "\
+        "{outdir}syn_{wildcards.nnodes}nodes_{wildcards.nmuts}muts_{wildcards.corr}corr_{wildcards.seed} {depth} 4000 {wildcards.nnodes}"

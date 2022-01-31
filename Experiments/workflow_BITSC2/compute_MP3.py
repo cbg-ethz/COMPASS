@@ -1,5 +1,5 @@
 # This script converts the true tree (in gv format), the tree inferred by COMPASS (gv) and the tree inferred by BITSC² to the format required
-# by the tool that computes the Bourque distance.
+# by the tool that computes the MP3 distance.
 
 import argparse
 import os
@@ -8,6 +8,17 @@ import pandas as pd
 import copy
 
 import mp3treesim as mp3
+
+def map_SNV_regions(filename):
+    SNV_to_region = []
+    with open(filename,"r") as f:
+        tmp = f.readline()
+        for line in f:
+            linesplit = line.split(",")
+            region = int(linesplit[1].lstrip("Region"))
+            SNV_to_region.append(region)
+    return SNV_to_region
+
 
 def remove_empty_nodes(tree):
     if len(tree["muts"][0])==0 and len(tree["CNVs"][0])==0:
@@ -55,6 +66,7 @@ def read_tree_gv(filename):
         # Read node labels
         tree["muts"] = [[] for x in tree["parents"]]
         tree["CNVs"] = [[] for x in tree["parents"]]
+        tree["CNLOHs"] = [[] for x in tree["parents"]]
         tree["n_muts"]=0
         finished_reading_labels=False
         while not finished_reading_labels:
@@ -73,7 +85,8 @@ def read_tree_gv(filename):
                         tree["CNVs"][node].append((region,sign))
 
                     elif event[:3]=="CNL":
-                        pass
+                        region = int(event[5:event.find(":")])+1
+                        tree["CNLOHs"][node].append(region)
                     else:
                         end = event.find(":")
                         if end>0:
@@ -95,7 +108,10 @@ def read_tree_gv(filename):
     remove_empty_nodes(tree)
     return tree
 
+
+
 def read_tree_BITSC2(basename):
+    SNV_to_region = map_SNV_regions(basename+"_variants.csv")
     tree={}
     with open(basename+"_treeBITSC2.csv","r") as file:
         parents=[]
@@ -107,6 +123,7 @@ def read_tree_BITSC2(basename):
     tree["muts"] = [[] for i in range(n_nodes)]
     tree["CNVs"]=[[] for i in range(n_nodes)]
     mut = 1
+    regions_with_CNV = set()
     with open(basename+"_originsBITSC2.csv","r") as file:
         for line in file:
             linesplit = line.split(" ")
@@ -115,23 +132,16 @@ def read_tree_BITSC2(basename):
             nodeCNV= int(linesplit[2]) -1
             sign = np.sign(float(linesplit[3]))
             if sign!=0:
-                tree["CNVs"][nodeCNV].append((mut,sign))
+                region = SNV_to_region[mut-1]+1
+                if not region in regions_with_CNV: # each region can only contain one CNV
+                    tree["CNVs"][nodeCNV].append((region,sign))
+                    regions_with_CNV.add(region)
             mut+=1
         tree["n_muts"]=mut
     remove_empty_nodes(tree)
     return tree
 
 
-
-def get_node_label(tree,node,CNVs_map):
-    label_list=[]
-    for mut in tree["muts"][node]:
-        label_list.append(str(mut))
-    for CNV in tree["CNVs"][node]:
-        if not CNV in CNVs_map:
-            CNVs_map[CNV] = tree["n_muts"]+1+len(CNVs_map)
-        label_list.append(str(CNVs_map[CNV]))
-    return "_".join(label_list)
 
 def get_node_label_MP3(tree,node,CNVs_map):
     label_list=[]
@@ -143,17 +153,7 @@ def get_node_label_MP3(tree,node,CNVs_map):
         label_list.append(str(CNVs_map[CNV]))
     return ",".join(label_list)
 
-def write_tree(tree,CNVs_map,file):
-    for n in range(1,len(tree["parents"])):
-        if tree["parents"][n]==0:
-            label = get_node_label(tree,n,CNVs_map)
-            label_parent = get_node_label(tree,tree["parents"][n],CNVs_map)
-            file.write(label_parent+" " + label + "\n")
-    for n in range(1,len(tree["parents"])):
-        if tree["parents"][n]!=0:
-            label = get_node_label(tree,n,CNVs_map)
-            label_parent = get_node_label(tree,tree["parents"][n],CNVs_map)
-            file.write(label_parent+" " + label + "\n")
+
 
 def write_tree_MP3(tree,CNVs_map,filename):
     with open(filename,"w") as file:
@@ -182,6 +182,7 @@ def evaluate_distances(basename_tmp,output):
     with open(output,"w") as outfile:
         outfile.write(str(mp3.similarity(treeTRUE,treeCOMPASS))+"\n")
         outfile.write(str(mp3.similarity(treeTRUE,treeBITSC2)))
+
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
