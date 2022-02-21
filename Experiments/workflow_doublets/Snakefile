@@ -1,0 +1,299 @@
+import os
+import numpy as np
+import pandas as pd
+
+
+seeds = list(range(40))
+nseeds = len(seeds)
+n_cells=2000
+n_cells_BITSC2=100
+n_nodes = [8]
+n_regions = 20 
+n_SNVs= [7]
+n_CNVs= [0]
+n_CNLOHs = [0]
+dropout_sigma= 0.0
+nodeprob_concentration= 10
+regionprobs_sigma = [0.5] 
+theta = 1000
+depth=20
+doublet_rate=[0.0,0.1,0.5,0.9]
+#doublet_rate=[0.0,0.025,0.05,0.075,0.10,0.15]
+
+outdir = "out/"
+tmpdir = "tmp/"
+
+for directory in [outdir,tmpdir,"out_COMPASS","out_COMPASS-nodoublet","out_BITSC2","out_SCITE","out_SCITE-nodoublet"]:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+
+rule all:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "results.csv"
+
+
+rule combine_results:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "results_COMPASS.csv",
+        "results_COMPASS-nodoublet.csv",
+        "results_BITSC2.csv",
+        "results_SCITE.csv",
+        "results_SCITE-nodoublet.csv"
+    output:
+        "results.csv"
+    run:
+        dfs = [pd.read_csv(results_file) for results_file in input]
+        df = pd.concat(dfs)
+        df.to_csv("results.csv",index=False)
+
+rule combine_results_method:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        expand("out_{{method}}/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_MP3-{{method}}.txt", nnodes=n_nodes,nSNVs=n_SNVs,nCNVs=n_CNVs,nCNLOHs=n_CNLOHs,rhosig=regionprobs_sigma,doublet=doublet_rate,seed=seeds)
+    output:
+        "results_{method}.csv"
+    run:
+        d={"nodes":[],"SNVs":[],"CNVs":[],"CNLOHs":[],"rho":[],"doublet_rate":[],"method":[],"MP3":[]}
+        for infile in input:
+            with open(infile,"r") as f:
+                result = float(f.readline())
+            namesplit = infile.split("_")
+            N_nodes=int(namesplit[2][:-5])
+            N_SNVs=int(namesplit[3][:-4])
+            N_CNVs=int(namesplit[4][:-4])
+            N_CNLOHs=int(namesplit[5][:-6])
+            rhosig=float(namesplit[6][:-8])
+            doublet_r=float(namesplit[7][:-7])
+            d["nodes"].append(N_nodes)
+            d["SNVs"].append(N_SNVs)
+            d["CNVs"].append(N_CNVs)
+            d["CNLOHs"].append(N_CNLOHs)
+            d["rho"].append(rhosig)
+            d["doublet_rate"].append(doublet_r)
+            d["method"].append(wildcards.method)
+            d["MP3"].append(result)
+        df = pd.DataFrame(d)
+        df.to_csv("results_"+wildcards.method+".csv",index=False)
+
+
+
+rule compute_MP3_COMPASS:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "out_COMPASS/{sample}_treeTRUE.gv",
+        "out_COMPASS/{sample}_treeCOMPASS.gv",
+    output:
+        "out_COMPASS/{sample}_MP3-COMPASS.txt"
+    shell:
+        "python compute_MP3.py -m COMPASS -i out_COMPASS/{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
+rule compute_MP3_COMPASS_nodoublet:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "out_COMPASS-nodoublet/{sample}_treeTRUE.gv",
+        "out_COMPASS-nodoublet/{sample}_treeCOMPASS.gv",
+    output:
+        "out_COMPASS-nodoublet/{sample}_MP3-COMPASS-nodoublet.txt"
+    shell:
+        "python compute_MP3.py -m COMPASS -i out_COMPASS-nodoublet/{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
+
+rule compute_MP3_BITSC2:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "out_BITSC2/{sample}_treeTRUE.gv",
+        "out_BITSC2/{sample}_treeBITSC2.csv",
+        "out_BITSC2/{sample}_originsBITSC2.csv",
+        "out_BITSC2/{sample}_variants.csv"
+    output:
+        "out_BITSC2/{sample}_MP3-BITSC2.txt"
+    shell:
+        "python compute_MP3.py -m BITSC2 -i out_BITSC2/{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
+rule compute_MP3_SCITE:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "out_SCITE/{sample}_treeTRUE.gv",
+        "out_SCITE/{sample}_map0.gv"
+    output:
+        "out_SCITE/{sample}_MP3-SCITE.txt"
+    shell:
+        "python compute_MP3.py -m SCITE -i out_SCITE/{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
+rule compute_MP3_SCITE_nodoublet:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        "out_SCITE-nodoublet/{sample}_treeTRUE.gv",
+        "out_SCITE-nodoublet/{sample}_map0.gv"
+    output:
+        "out_SCITE-nodoublet/{sample}_MP3-SCITE-nodoublet.txt"
+    shell:
+        "python compute_MP3.py -m SCITE -i out_SCITE-nodoublet/{wildcards.sample} --tmp {tmpdir}{wildcards.sample} -o {output}"
+
+
+rule generate_synthetic_data_COMPASS:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        "out_COMPASS/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_variants.csv",
+        "out_COMPASS/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_regions.csv",
+        "out_COMPASS/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data_main.py -m COMPASS -o out_COMPASS/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "--ncells {n_cells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --doublet {wildcards.doublet} --seed {wildcards.seed}"
+
+rule generate_synthetic_data_COMPASS_nodoublet:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        "out_COMPASS-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_variants.csv",
+        "out_COMPASS-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_regions.csv",
+        "out_COMPASS-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data_main.py -m COMPASS -o out_COMPASS-nodoublet/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "--ncells {n_cells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --doublet {wildcards.doublet} --seed {wildcards.seed}"
+
+
+rule generate_synthetic_data_BITSC2:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_AD.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_DP.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_segments.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_variants.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data_main.py -m BITSC2 -o out_BITSC2/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "--ncells {n_cells_BITSC2} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --doublet {wildcards.doublet} --seed {wildcards.seed}"
+
+rule generate_synthetic_data_SCITE:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        "out_SCITE/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_genotypes.csv",
+        "out_SCITE/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data_main.py -m SCITE -o out_SCITE/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "--ncells {n_cells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --doublet {wildcards.doublet} --seed {wildcards.seed}"
+
+rule generate_synthetic_data_SCITE_nodoublet:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    output:
+        "out_SCITE-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_genotypes.csv",
+        "out_SCITE-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data_main.py -m SCITE -o out_SCITE-nodoublet/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "--ncells {n_cells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --doublet {wildcards.doublet} --seed {wildcards.seed}"
+
+rule infer_tree_COMPASS:
+    params:
+        threads="4",
+        runtime="2:50",
+        memory="6000"
+    input:
+        "out_COMPASS/{sample}_variants.csv",
+        "out_COMPASS/{sample}_regions.csv"
+    output:
+        "out_COMPASS/{sample}_treeCOMPASS.gv"
+    shell:
+        "./COMPASS -o {output} -i out_COMPASS/{wildcards.sample} --nchains 4 --chainlength 4000 --burnin 4000 --temperature 10 --filterregions 0 --prettyplot 0"
+
+rule infer_tree_COMPASS_nodoublet:
+    params:
+        threads="4",
+        runtime="2:50",
+        memory="6000"
+    input:
+        "out_COMPASS-nodoublet/{sample}_variants.csv",
+        "out_COMPASS-nodoublet/{sample}_regions.csv"
+    output:
+        "out_COMPASS-nodoublet/{sample}_treeCOMPASS.gv"
+    shell:
+        "./COMPASS -o {output} -i out_COMPASS-nodoublet/{wildcards.sample} --nchains 4 --chainlength 4000 --burnin 4000 --temperature 10 --filterregions 0 --prettyplot 0 -d 0"
+
+
+rule infer_tree_BITSC2:
+    params:
+        runtime="38:00",
+        threads="1",
+        memory="6000"
+    input:
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_DP.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_AD.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_segments.csv"
+    output:
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_originsBITSC2.csv",
+        "out_BITSC2/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_treeBITSC2.csv"
+    shell:
+        "Rscript --vanilla BITSC2/code/BiTSC2_run_script.R out_BITSC2/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} "\
+        "out_BITSC2/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} {depth} 5000 {wildcards.nnodes}"
+
+
+rule infer_tree_SCITE:
+    params:
+        threads="1",
+        runtime="4:00",
+        memory="2000"
+    input:
+        "out_SCITE/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_genotypes.csv",
+    output:
+        "out_SCITE/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_map0.gv"
+    shell:
+        "./infSCITE -i {input} -o out_SCITE/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} -n {wildcards.nSNVs} -m {n_cells} -r 4 -l 5000 -fd 0.01 -ad 0.06 0.06 -cc 0.01 -s -d"
+
+rule infer_tree_SCITE_nodoublet:
+    params:
+        threads="1",
+        runtime="4:00",
+        memory="2000"
+    input:
+        "out_SCITE-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_genotypes.csv",
+    output:
+        "out_SCITE-nodoublet/syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{doublet}doublet_{seed}_map0.gv"
+    shell:
+        "./infSCITE -i {input} -o out_SCITE-nodoublet/syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.doublet}doublet_{wildcards.seed} -n {wildcards.nSNVs} -m {n_cells} -r 4 -l 5000 -fd 0.01 -ad 0.06 0.06 -cc 0.01 -s"
