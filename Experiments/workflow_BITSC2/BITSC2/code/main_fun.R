@@ -81,14 +81,6 @@ heuristic_tree_cluster_gen <- function(X,D,K)
   P <- t(X/D) # observed VAF
   P[which(t(D)==0)] <- 0
   P_cluster <- Mclust(P,G=K,modelNames=c("EII","EEI"),verbose=TRUE,warn=TRUE)
-  init_failed=FALSE
-  if (is.null(P_cluster$parameters$mean)){
-    init_failed=TRUE
-    nSNVs = nrow(X)
-    P_cluster$parameters$mean = matrix(runif(nSNVs * K),nrow=nSNVs)
-    P_cluster$classification = floor(runif(ncol(X), min=1, max=K+1))
-    print("WARNING: failed heuristic initialisation, using random initialization instead.")
-  }
   centers <- t(P_cluster$parameters$mean)
   vaf_mean <- apply(centers,1,mean)
   ord <- order(vaf_mean,decreasing = F)
@@ -99,12 +91,7 @@ heuristic_tree_cluster_gen <- function(X,D,K)
   C <- sapply(C,function(x){which(ord==x)})
   
   # initialize phi
-  if (init_failed){
-    phi = runif(K)
-    phi = phi / sum(phi)
-  }else{
-    phi <- P_cluster$parameters$pro[ord]
-  }
+  phi <- P_cluster$parameters$pro[ord]
   
   # initialize tree
   dis<- dist(centers,p=2)

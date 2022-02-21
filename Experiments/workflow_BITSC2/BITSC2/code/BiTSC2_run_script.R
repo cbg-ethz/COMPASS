@@ -50,10 +50,7 @@ colnames(D) <- NULL
 X <- data.matrix(read.table(paste(args[1],"_AD.csv",sep=""),sep=","))
 colnames(X) <- NULL
 psi <- rep(strtoi(args[3]),dim(D)[2]) #sequencing depth
-# Genomic segments: group SNVs that are in the same region.
-segments <- data.matrix(read.table(paste(args[1],"_segments.csv",sep=""),sep=","))
-colnames(segments) <- NULL
-#segments <- array(c(1:dim(D)[1],1:dim(D)[1]),dim=c(dim(D)[1],2))
+segments <- array(c(1:dim(D)[1],1:dim(D)[1]),dim=c(dim(D)[1],2))
 
 
 ##############################################

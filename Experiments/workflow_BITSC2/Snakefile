@@ -1,18 +1,15 @@
 import numpy as np
 import pandas as pd
 
-seeds = list(range(100))
-nseeds = len(seeds)
+seeds = list(range(10))
 n_cells_COMPASS=2000
 n_cells_BITSC2=100
-n_nodes = [4,6,8]
-n_regions = 20 
-n_SNVs= [7,20,50]
-n_CNVs= [0,3,8]
-n_CNLOHs = [2]
+n_nodes = [8] #4,6,8 
+n_SNVs= [7,20,100] 
+n_CNVs= [0,3,5] #0,1,3,5
 dropout_sigma= 0.0
 nodeprob_concentration= 10
-regionprobs_sigma = [0.0,0.1,0.3,0.5,0.7] 
+regionprobs_sigma = [0.0,0.3,0.7] #0.0,0.1,0.3,0.5,0.7
 theta = 1000
 depth=20
 
@@ -25,8 +22,7 @@ rule all:
         runtime="10",
         memory="1000"
     input:
-        "results_BITSC2.csv",
-        "error_statistics.csv"
+        "results_BITSC2.csv"
 
 
 rule combine_results:
@@ -35,11 +31,11 @@ rule combine_results:
         runtime="10",
         memory="1000"
     input:
-        expand(outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_MP3.txt", nnodes=n_nodes,nSNVs=n_SNVs,nCNVs=n_CNVs,nCNLOHs=n_CNLOHs,rhosig=regionprobs_sigma,seed=seeds)
+        expand(outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{rhosig}rhosigma_{seed}_MP3.txt", nnodes=n_nodes,nSNVs=n_SNVs,nCNVs=n_CNVs,rhosig=regionprobs_sigma,seed=seeds)
     output:
         "results_BITSC2.csv"
     run:
-        d={"nodes":[],"SNVs":[],"CNVs":[],"CNLOHs":[],"rho":[],"method":[],"MP3":[]}
+        d={"nodes":[],"SNVs":[],"CNVs":[],"rho":[],"method":[],"MP3":[]}
         for infile in input:
             with open(infile,"r") as f:
                 result_COMPASS = float(f.readline())
@@ -48,52 +44,21 @@ rule combine_results:
             N_nodes=int(namesplit[1][:-5])
             N_SNVs=int(namesplit[2][:-4])
             N_CNVs=int(namesplit[3][:-4])
-            N_CNLOHs=int(namesplit[4][:-6])
-            rhosig=float(namesplit[5][:-8])
+            rhosig=float(namesplit[4][:-8])
             d["nodes"].append(N_nodes)
             d["SNVs"].append(N_SNVs)
             d["CNVs"].append(N_CNVs)
-            d["CNLOHs"].append(N_CNLOHs)
             d["rho"].append(rhosig)
             d["method"].append("COMPASS")
             d["MP3"].append(result_COMPASS)
             d["nodes"].append(N_nodes)
             d["SNVs"].append(N_SNVs)
             d["CNVs"].append(N_CNVs)
-            d["CNLOHs"].append(N_CNLOHs)
             d["rho"].append(rhosig)
             d["method"].append("BITSC2")
             d["MP3"].append(result_BITSC2)
         df = pd.DataFrame(d)
         df.to_csv("results_BITSC2.csv",index=False)
-
-rule cp_error_stats:
-    params:
-        threads="1",
-        runtime="10",
-        memory="1000"
-    input:
-        outdir+"syn_8nodes_7SNVs_3CNVs_2CNLOHs_0.5rhosigma_error_statistics.txt"
-    output:
-        "error_statistics.csv"
-    shell:
-        "cp {input} {output}"
-
-rule compute_error_rates:
-    params:
-        threads="1",
-        runtime="10",
-        memory="1000"
-    input:
-        expand(outdir+"{{sample}}_{seed}_treeTRUE.gv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_treeCOMPASS.gv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_treeBITSC2.csv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_originsBITSC2.csv",seed=seeds),
-        expand(outdir+"{{sample}}_{seed}_variants.csv",seed=seeds)
-    output:
-        outdir+"{sample}_error_statistics.txt"
-    shell:
-        "python compute_error_stats.py -i {outdir}{wildcards.sample} --nseeds {nseeds} -o {output}"
 
 
 
@@ -106,8 +71,7 @@ rule compute_MP3:
         outdir+"{sample}_treeTRUE.gv",
         outdir+"{sample}_treeCOMPASS.gv",
         outdir+"{sample}_treeBITSC2.csv",
-        outdir+"{sample}_originsBITSC2.csv",
-        outdir+"{sample}_variants.csv"
+        outdir+"{sample}_originsBITSC2.csv"
     output:
         outdir+"{sample}_MP3.txt"
     shell:
@@ -120,16 +84,15 @@ rule generate_synthetic_data:
         runtime="10",
         memory="1000"
     output:
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_variants.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_regions.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_AD.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_DP.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_segments.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{ncells}cells_{rhosig}rhosigma_{seed}_tree.gv"
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{ncells}cells_{rhosig}rhosigma_{seed}_variants.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{ncells}cells_{rhosig}rhosigma_{seed}_regions.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{ncells}cells_{rhosig}rhosigma_{seed}_AD.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{ncells}cells_{rhosig}rhosigma_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{ncells}cells_{rhosig}rhosigma_{seed}_tree.gv"
     shell:
-        "python generate_synthetic_data_BITSC2.py -o {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.ncells}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
-        "--ncells {wildcards.ncells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} --nCNLOHs {wildcards.nCNLOHs} " \
-        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --nregions {n_regions} --regionprobsigma {wildcards.rhosig} --seed {wildcards.seed}"
+        "python generate_synthetic_data_BITSC2.py -o {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.ncells}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
+        "--ncells {wildcards.ncells} --nnodes {wildcards.nnodes} --nSNVs {wildcards.nSNVs} --nCNVs {wildcards.nCNVs} " \
+        "--dropoutsigma {dropout_sigma} --nodeprobconcentration {nodeprob_concentration} --depth {depth} --theta {theta} --regionprobsigma {wildcards.rhosig} --seed {wildcards.seed}"
 
 rule cp_true_tree:
     params:
@@ -137,39 +100,36 @@ rule cp_true_tree:
         runtime="10",
         memory="1000"
     input:
-        tree=tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_tree.gv",
-        variants=tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_variants.csv"
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_tree.gv"
     output:
-        tree=outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_treeTRUE.gv",
-        variants=outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_variants.csv"
+        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{rhosig}rhosigma_{seed}_treeTRUE.gv"
     shell: 
-        "cp {input.tree} {output.tree}; cp {input.variants} {output.variants}"
+        "cp {input} {output}"
 
 rule infer_tree_COMPASS:
     params:
         threads="4",
-        runtime="2:50",
+        runtime="50",
         memory="6000"
     input:
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_variants.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_regions.csv"
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_variants.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_"+str(n_cells_COMPASS)+"cells_{rhosig}rhosigma_{seed}_regions.csv"
     output:
-        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_treeCOMPASS.gv"
+        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{rhosig}rhosigma_{seed}_treeCOMPASS.gv"
     shell:
-        "./COMPASS -o {output} -i {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{n_cells_COMPASS}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} --nchains 4 --chainlength 10000 --burnin 4000 --temperature 10 -d 0 --filterregions 0 --prettyplot 0"
+        "./COMPASS -o {output} -i {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{n_cells_COMPASS}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} --nchains 4 --chainlength 5000 --burnin 2000 --temperature 10 -d 0 --filterregions 0 --prettyplot 0"
 
 rule infer_tree_BITSC2:
     params:
-        runtime="38:00",
+        runtime="4:00",
         threads="1",
-        memory="6000"
+        memory="1000"
     input:
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_DP.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_AD.csv",
-        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_segments.csv"
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_DP.csv",
+        tmpdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_"+str(n_cells_BITSC2)+"cells_{rhosig}rhosigma_{seed}_AD.csv"
     output:
-        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_originsBITSC2.csv",
-        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{nCNLOHs}CNLOHs_{rhosig}rhosigma_{seed}_treeBITSC2.csv"
+        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{rhosig}rhosigma_{seed}_originsBITSC2.csv",
+        outdir+"syn_{nnodes}nodes_{nSNVs}SNVs_{nCNVs}CNVs_{rhosig}rhosigma_{seed}_treeBITSC2.csv"
     shell:
-        "Rscript --vanilla BITSC2/code/BiTSC2_run_script.R {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{n_cells_BITSC2}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
-        "{outdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.nCNLOHs}CNLOHs_{wildcards.rhosig}rhosigma_{wildcards.seed} {depth} 10000 {wildcards.nnodes}"
+        "Rscript --vanilla BITSC2/code/BiTSC2_run_script.R {tmpdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{n_cells_BITSC2}cells_{wildcards.rhosig}rhosigma_{wildcards.seed} "\
+        "{outdir}syn_{wildcards.nnodes}nodes_{wildcards.nSNVs}SNVs_{wildcards.nCNVs}CNVs_{wildcards.rhosig}rhosigma_{wildcards.seed} {depth} 4000 {wildcards.nnodes}"
