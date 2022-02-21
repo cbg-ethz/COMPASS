@@ -527,9 +527,7 @@ std::string Node::get_label_simple(std::set<int> excluded_mutations){
         label+= "<B>CNV" + sign + " "+ data.region_to_name[region];
         std::vector<int> alleles = std::get<2>(CNV);
         if (alleles.size()>0) label+=":";
-        std::cout<<data.region_to_name[region]<<": "<<alleles.size();
         for (int i = 0; i<alleles.size();i++){
-            std::cout<<alleles[i]<<std::endl;
             if (alleles[i]==0) label+="REF";
             else label+="ALT";
             if (i+1<alleles.size()) label+=",";
