@@ -78,6 +78,7 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
     std::vector<std::vector<int>> ref_counts{};
     std::vector<std::vector<int>> alt_counts{};
     std::vector<std::vector<int>> genotypes{};
+    std::vector<std::string> cell_names{};
     std::vector<int> ref_counts_variant{};
     std::vector<int> alt_counts_variant{};
     std::vector<int> genotypes_variant{};
@@ -88,7 +89,12 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
     std::vector<std::string> columns{};
     while (std::getline(header, val, ',')){
         columns.push_back(val);
+        if (val != "CHR" && val!="POS" && val!="REF" && val!="ALT" && val!="REGION" && val!="NAME" && val!="FREQ"){
+            cell_names.push_back(val);
+        }
     }
+
+
     // content
     while(std::getline(file_variants,line,'\n')){
         ref_counts_variant.clear();
@@ -215,6 +221,7 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
             cells[j].alt_counts.push_back(alt_counts[i][j]);
             cells[j].genotypes.push_back(genotypes[i][j]);
         }
+        cells[j].name = cell_names[j];
         int total_count=0;
         if (use_CNV){
             for (int i=0;i<n_regions;i++){

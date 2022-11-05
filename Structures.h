@@ -10,6 +10,7 @@ struct Cell{
     std::vector<int> region_counts; // number of reads in each region
     std::vector<int> genotypes;
     std::vector<int> GQ;
+    std::string name;
     int total_counts; // sum of the read counts in each region
 };
 

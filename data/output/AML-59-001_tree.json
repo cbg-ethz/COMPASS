@@ -1,0 +1,46 @@
+{
+"nodes":[
+	{
+		"name": "Node 0",
+		"parent": "-",
+		"SNV": ["TP53 intronic","chr6_17076840 intergenic","chr10_5554293 intergenic"],
+		"CNLOH": [],
+		"CNV": []
+	},
+	{
+		"name": "Node 1",
+		"parent": "Node 3",
+		"SNV": ["RUNX1 p.D198N"],
+		"CNLOH": [],
+		"CNV": []
+	},
+	{
+		"name": "Node 2",
+		"parent": "Node 3",
+		"SNV": ["RUNX1 p.N153fs"],
+		"CNLOH": [],
+		"CNV": ["+WT1"]
+	},
+	{
+		"name": "Node 3",
+		"parent": "Node 0",
+		"SNV": ["DNMT3A p.R882H","IDH1 p.R132C"],
+		"CNLOH": [],
+		"CNV": []
+	},
+	{
+		"name": "Node 4",
+		"parent": "Node 1",
+		"SNV": [],
+		"CNLOH": [],
+		"CNV": ["-TP53"]
+	},
+	{
+		"name": "Node 5",
+		"parent": "Node 2",
+		"SNV": [],
+		"CNLOH": [],
+		"CNV": ["-EZH2"]
+	}
+]
+}

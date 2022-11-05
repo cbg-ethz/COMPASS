@@ -101,9 +101,12 @@ Tree::Tree(const Tree& source):
     }
 
     // Initialize utils
-    cells_attach_loglik.resize(n_cells);
-    cells_loglik.resize(n_cells);
-    cells_attach_prob.resize(n_cells);
+    //cells_attach_loglik.resize(n_cells);
+    //cells_loglik.resize(n_cells);
+    //cells_attach_prob.resize(n_cells);
+    cells_attach_loglik = source.cells_attach_loglik;
+    cells_loglik = source.cells_loglik;
+    cells_attach_prob = source.cells_attach_prob;
     best_attachments = source.best_attachments;
 }
 
@@ -150,6 +153,9 @@ Tree& Tree::operator=(const Tree& source){
     log_likelihood = source.log_likelihood;
     log_score = source.log_score;
     best_attachments = source.best_attachments;
+    cells_attach_loglik = source.cells_attach_loglik;
+    cells_loglik = source.cells_loglik;
+    cells_attach_prob = source.cells_attach_prob;
     
     for (int i=0;i<n_nodes;i++){
         nodes.push_back(new Node(*source.nodes[i]));
@@ -614,6 +620,19 @@ void Tree::to_dot_pretty(std::string filename){
 
     std::vector<std::string> colors{"lightcoral","skyblue3","sandybrown","paleturquoise3","thistle","darkolivegreen3","lightpink","mediumpurple",
                     "darkseagreen3","navajowhite","gold"};
+
+    // If filename ends with .gv: only output the tree in graphviz format. Otherwise output tree and cell assignments to nodes.
+    bool full_output = true;
+    if (filename.substr(filename.size()-3)==".gv"){
+        full_output = false;
+    }
+    std::string basename(filename);
+    if (full_output){
+        filename = filename + "_tree.gv";
+    }
+    else{
+        basename = filename.substr(0,filename.size()-3);
+    }
     std::ofstream out_file(filename);
 
     out_file <<"digraph G{"<<std::endl;
@@ -670,6 +689,186 @@ void Tree::to_dot_pretty(std::string filename){
     if (parameters.verbose) std::cout<<"Dropout rates"<<std::endl;
     for (int i=0;i<n_loci;i++){
         if (parameters.verbose) std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
+    }
+
+    if (full_output){
+        // Assignments of cells to nodes 
+        std::ofstream out_file_cell_assignments(basename+"_cellAssignments.tsv");
+        std::ofstream out_file_cell_assignment_probs(basename+"_cellAssignmentProbs.tsv");
+
+        //Header
+        out_file_cell_assignments <<"cell\tnode"<<std::endl;
+        out_file_cell_assignment_probs <<"cell";
+        for (int k=0; k < n_nodes;k++){
+            out_file_cell_assignment_probs<<"\tNode "<<k;
+        }
+        if (parameters.use_doublets){
+            std::cout<<cells_attach_loglik[0].size()<<std::endl;
+                for (int k=0;k<n_nodes;k++){
+                    for (int l=k;l<n_nodes;l++){
+                        out_file_cell_assignment_probs << "\tDoublet "<<k<<","<<l;
+                    }
+                }
+            }
+        out_file_cell_assignment_probs<<std::endl;
+        
+        // Content
+        for (int j=0;j<n_cells;j++){
+            out_file_cell_assignments << cells[j].name<<"\t"<<best_attachments[j] << std::endl;
+            out_file_cell_assignment_probs<<cells[j].name;
+            for (int k=0; k < n_nodes;k++){
+                if (cells_attach_prob[j][k] < n_nodes){
+                    out_file_cell_assignment_probs<<"\t"<<std::exp(cells_attach_loglik[j][k]-cells_loglik[j]);
+                }
+                else{
+                    out_file_cell_assignment_probs<<"\tDoublet";
+                }
+            }
+            if (parameters.use_doublets){
+                int idx=0;
+                for (int k=0;k<n_nodes;k++){
+                    for (int l=k;l<n_nodes;l++){
+                        out_file_cell_assignment_probs << "\t"<<std::exp(cells_attach_loglik[j][n_nodes+idx]-cells_loglik[j]);
+                        idx++;
+                    }
+                }
+            }
+            out_file_cell_assignment_probs<<std::endl;
+        }
+         out_file_cell_assignments.close();
+         out_file_cell_assignment_probs.close();
+
+        // ----------------------------------
+        // Tree in json format
+        std::ofstream out_file_json(basename+"_tree.json");
+        out_file_json<<"{"<<std::endl;
+        out_file_json<<"\"nodes\":["<<std::endl;
+        for (int k=0;k<n_nodes;k++){
+            out_file_json<<"\t{"<<std::endl;
+            out_file_json<<"\t\t\"name\": \"Node "<<k<<"\","<<std::endl;
+            if (parents[k]>=0){
+                out_file_json<<"\t\t\"parent\": \"Node "<<parents[k]<<"\","<<std::endl;
+            }
+            else{
+                out_file_json<<"\t\t\"parent\": \"-\","<<std::endl;
+            }
+            
+            //SNV
+            out_file_json<<"\t\t\"SNV\": [";
+            std::vector<int> SNVs = nodes[k]->get_mutations();
+            if (SNVs.size()>0){
+                out_file_json<<"\""<<data.locus_to_name[SNVs[0]]<<"\"";
+                for (int i=1;i<SNVs.size();i++){
+                    out_file_json<<",\""<<data.locus_to_name[SNVs[i]]<<"\"";
+                }
+            }
+            out_file_json<<"],"<<std::endl;
+            //CNLOH
+            out_file_json<<"\t\t\"CNLOH\": [";
+            std::multiset<std::pair<int,std::vector<int>>> CNLOHs = nodes[k]->get_CNLOH_events();
+            if (CNLOHs.size()>0){
+                bool first=true;
+                for (auto CNLOH: CNLOHs){
+                    if (!first) {
+                         out_file_json<<",";
+                    }
+                    out_file_json<<"\"";
+                    out_file_json<<data.region_to_name[CNLOH.first];
+                    out_file_json<<"\"";
+                     first=false;
+                }
+            }
+            out_file_json<<"],"<<std::endl;
+
+            //CNV
+            out_file_json<<"\t\t\"CNV\": [";
+            std::multiset<std::tuple<int,int,std::vector<int>>> CNVs = nodes[k]->get_CNV_events();
+            if (CNVs.size()>0){
+                bool first=true;
+                for (auto CNV: CNVs){
+                    if (!first) {
+                         out_file_json<<",";
+                    }
+                    out_file_json<<"\"";
+                    if (std::get<1>(CNV)>0){
+                         out_file_json<<"+";
+                    }
+                    else{
+                        out_file_json<<"-";
+                    }
+                     out_file_json<<data.region_to_name[std::get<0>(CNV)];
+                     out_file_json<<"\"";
+                     first=false;
+                }
+            }
+            out_file_json<<"]"<<std::endl;
+
+            out_file_json<<"\t}";
+            if (k<n_nodes-1){
+                out_file_json<<",";
+            }
+            out_file_json<<std::endl;
+        }
+
+        out_file_json<<"]"<<std::endl;
+        out_file_json<<"}"<<std::endl;
+        out_file_json.close();
+
+        // ----------------------------------
+        // Node genotypes 
+
+        std::ofstream out_file_genotypes(basename+"_nodes_genotypes.tsv");
+
+        // Header
+        out_file_genotypes<<"node";
+        for (std::string name : data.locus_to_name){
+            out_file_genotypes << "\t"<<name;
+        }
+        out_file_genotypes<<std::endl;
+
+        // Content
+        for (int k=0;k<n_nodes;k++){
+            out_file_genotypes<<"Node "<<k;
+            for (int i=0;i<n_loci;i++){
+                if (nodes[k]->get_n_alt_allele(i)==0){
+                     out_file_genotypes<<"\t0";
+                }
+                else if (nodes[k]->get_n_ref_allele(i)>0 ){
+                     out_file_genotypes<<"\t1";
+                }
+                else{
+                    out_file_genotypes<<"\t2";
+                }
+            }
+            out_file_genotypes<<std::endl;
+        }
+
+        out_file_genotypes.close();
+
+        // ----------------------------------
+        // Node copy numbers
+        if (use_CNV){
+
+            std::ofstream out_file_copynumbers(basename+"_nodes_copynumbers.tsv");
+
+            // Header
+            out_file_copynumbers<<"node";
+            for (std::string name : data.region_to_name){
+                out_file_copynumbers << "\t"<<name;
+            }
+            out_file_copynumbers<<std::endl;
+
+            // Content
+            for (int k=0;k<n_nodes;k++){
+                out_file_copynumbers<<"Node "<<k;
+                for (int i=0;i<n_regions;i++){
+                    out_file_copynumbers<<"\t"<<nodes[k]->get_cn_region(i);
+                }
+                out_file_copynumbers<<std::endl;
+            }
+
+            out_file_copynumbers.close();
+        }
     }
     
 }
@@ -835,7 +1034,7 @@ void Tree::find_CNV(){
 
     std::vector<double> attach_prob{}; // Posterior probability of the attachments of a cell
     attach_prob.resize(n_attachment_points);
-    std::vector<std::vector<double>> cells_attach_prob{};
+    //std::vector<std::vector<double>> cells_attach_prob{};
     for (int j=0; j<n_cells; j++){ 
         attach_prob.clear();
         double best_attach_score=-DBL_MAX;

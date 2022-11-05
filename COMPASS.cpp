@@ -112,7 +112,12 @@ int main(int argc, char* argv[]){
 	}
     if (output_simplified) best_trees[best_score_index].to_dot_pretty(output);
     else best_trees[best_score_index].to_dot(output);
-    std::cout<<"Completed ! The output was written to "<<output<< " in dot format. You can visualize it by running: dot -Tpng "<<output<<" -o output.png"<<std::endl;
+
+    std::string gv_filename(output);
+    if (output.substr(output.size()-3)!=".gv"){
+        gv_filename = output + + "_tree.gv";
+    }
+    std::cout<<"Completed ! The output was written to "<<output<< ". You can visualize the tree by running: dot -Tpng "<<gv_filename<<" -o output.png"<<std::endl;
 
 	return 0;
 }
