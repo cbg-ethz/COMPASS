@@ -28,15 +28,15 @@ jobs:
         with:
           push: true
           tags: |
-            murphycj/COMPASS:dev
-            ghcr.io/murphycj/COMPASS:dev
+            murphycj/compass:dev
+            ghcr.io/murphycj/compass:dev
       - name: Push release image
         uses: docker/build-push-action@v2
         if: github.event_name == 'release'
         with:
           push: true
           tags: |
-            murphycj/COMPASS:${{ github.event.release.tag_name }}
-            murphycj/COMPASS:latest
-            ghcr.io/murphycj/COMPASS:${{ github.event.release.tag_name }}
-            ghcr.io/murphycj/COMPASS:latest
+            murphycj/compass:${{ github.event.release.tag_name }}
+            murphycj/compass:latest
+            ghcr.io/murphycj/compass:${{ github.event.release.tag_name }}
+            ghcr.io/murphycj/compass:latest
