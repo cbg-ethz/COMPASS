@@ -692,39 +692,57 @@ void Tree::to_dot_pretty(std::string filename){
     }
 
     if (full_output){
+        // Recompute assignment probabilities, only taking singlets into account
+        std::vector<std::vector<double>> cells_attach_loglik_singlet; 
+        std::vector<double> cells_loglik_singlet;
+        std::vector<int> best_attachments_singlet;
+        cells_attach_loglik_singlet.resize(n_cells);
+        cells_loglik_singlet.resize(n_cells);
+        best_attachments_singlet.resize(n_cells);
+        for (int j=0;j<n_cells;j++){
+            cells_attach_loglik_singlet[j].resize(n_nodes);
+            double best_attach_score=-DBL_MAX;
+            for (int k=0;k<n_nodes;k++){
+                cells_attach_loglik_singlet[j][k] = cells_attach_loglik[j][k];
+                if (cells_attach_loglik_singlet[j][k]>best_attach_score){
+                    best_attach_score = cells_attach_loglik_singlet[j][k];
+                    best_attachments_singlet[j] = k;
+                }
+            }
+            cells_loglik_singlet[j] = Scores::log_sum_exp(cells_attach_loglik_singlet[j]);
+        }
+
         // Assignments of cells to nodes 
         std::ofstream out_file_cell_assignments(basename+"_cellAssignments.tsv");
         std::ofstream out_file_cell_assignment_probs(basename+"_cellAssignmentProbs.tsv");
 
         //Header
-        out_file_cell_assignments <<"cell\tnode"<<std::endl;
+        out_file_cell_assignments <<"cell\tnode\tdoublet"<<std::endl;
         out_file_cell_assignment_probs <<"cell";
         for (int k=0; k < n_nodes;k++){
             out_file_cell_assignment_probs<<"\tNode "<<k;
         }
-        if (parameters.use_doublets){
+        /*if (parameters.use_doublets){
             std::cout<<cells_attach_loglik[0].size()<<std::endl;
                 for (int k=0;k<n_nodes;k++){
                     for (int l=k;l<n_nodes;l++){
                         out_file_cell_assignment_probs << "\tDoublet "<<k<<","<<l;
                     }
                 }
-            }
+        }*/
         out_file_cell_assignment_probs<<std::endl;
         
         // Content
         for (int j=0;j<n_cells;j++){
-            out_file_cell_assignments << cells[j].name<<"\t"<<best_attachments[j] << std::endl;
+            out_file_cell_assignments << cells[j].name<<"\t"<<best_attachments_singlet[j];
+            if (best_attachments[j]>=n_nodes) out_file_cell_assignments<<"\tyes"<<std::endl;
+            else out_file_cell_assignments<<"\tno"<<std::endl;
+            
             out_file_cell_assignment_probs<<cells[j].name;
             for (int k=0; k < n_nodes;k++){
-                if (cells_attach_prob[j][k] < n_nodes){
-                    out_file_cell_assignment_probs<<"\t"<<std::exp(cells_attach_loglik[j][k]-cells_loglik[j]);
-                }
-                else{
-                    out_file_cell_assignment_probs<<"\tDoublet";
-                }
+                out_file_cell_assignment_probs<<"\t"<<std::exp(cells_attach_loglik_singlet[j][k]-cells_loglik_singlet[j]);
             }
-            if (parameters.use_doublets){
+            /*if (parameters.use_doublets){
                 int idx=0;
                 for (int k=0;k<n_nodes;k++){
                     for (int l=k;l<n_nodes;l++){
@@ -732,7 +750,7 @@ void Tree::to_dot_pretty(std::string filename){
                         idx++;
                     }
                 }
-            }
+            }*/
             out_file_cell_assignment_probs<<std::endl;
         }
          out_file_cell_assignments.close();

@@ -3,7 +3,7 @@
 	{
 		"name": "Node 0",
 		"parent": "-",
-		"SNV": ["TP53 intronic","chr6_17076840 intergenic","chr10_5554293 intergenic"],
+		"SNV": ["chr10_5554293 intergenic","chr6_17076840 intergenic","TP53 intronic"],
 		"CNLOH": [],
 		"CNV": []
 	},
@@ -30,17 +30,17 @@
 	},
 	{
 		"name": "Node 4",
-		"parent": "Node 1",
-		"SNV": [],
-		"CNLOH": [],
-		"CNV": ["-TP53"]
-	},
-	{
-		"name": "Node 5",
 		"parent": "Node 2",
 		"SNV": [],
 		"CNLOH": [],
 		"CNV": ["-EZH2"]
+	},
+	{
+		"name": "Node 5",
+		"parent": "Node 1",
+		"SNV": [],
+		"CNLOH": [],
+		"CNV": ["-TP53"]
 	}
 ]
 }
