@@ -1,0 +1,19 @@
+name: Build & test
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build
+        shell: bash
+        run: |
+          make
