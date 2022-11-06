@@ -44,7 +44,7 @@ The `data` directory contains an example synthetic input, as well as two preproc
 If [output_name] ends with .gv , COMPASS will only output the tree in graphviz format, which can then be plotted. Otherwise, COMPASS will produce as output:
 * [output_name]_tree.gv: tree in graphviz format
 * [output_name]_tree.json: tree in json format
-* [output_name]_cellAssignments.tsv: hard assignments of cells to nodes
+* [output_name]_cellAssignments.tsv: hard assignments of cells to nodes, and whether or not the cell was inferred to be a doublet (in which case the node assignment is unreliable).
 * [output_name]_cellAssignmentsProbs.tsv: posterior attachment probabilities of cells to nodes
 * [output_name]_nodes_genotypes.tsv: Genotype of each SNV for each node (0: no mutation; 1: heterozygous; 2: homozygous mutated)
 * [output_name]_nodes_copynumbers.tsv: Copy number of each region for each node
