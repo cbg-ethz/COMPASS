@@ -4,8 +4,6 @@ FROM ubuntu:latest
 LABEL author="Etienne Sollier" \
       description="COMPASS"
 
-RUN apk add --no-cache bash
-
 # Add the COMPASS source files to the container
 ADD . /usr/src/COMPASS
 WORKDIR /usr/src/COMPASS
