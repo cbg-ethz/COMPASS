@@ -1,4 +1,3 @@
-# Teeny-tiny matplotlib image based on alpine
 FROM ubuntu:latest
 
 LABEL author="Etienne Sollier" \
@@ -7,13 +6,11 @@ LABEL author="Etienne Sollier" \
 RUN apt-get update && apt-get install -y make g++ graphviz
 
 # Add the COMPASS source files to the container
-ADD . /app
 WORKDIR /app
 COPY . .
 
 # Install COMPASS
 RUN make
+RUN cp COMPASS /usr/local/bin/
 
-# Set up entrypoint and cmd for easy docker usage
-ENTRYPOINT [ "/app/COMPASS" ]
-CMD [ "." ]
+WORKDIR /data/

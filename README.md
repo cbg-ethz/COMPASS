@@ -15,11 +15,6 @@ dot -Tpng -o AML-59-001_tree.png AML-59-001_tree.gv
 
 Graphviz is required in order to plot the tree, which can be installed on Ubuntu by running `sudo apt-get install graphviz `
 
-### Use with Docker
-```
-docker run -t -v `pwd`:`pwd` -w `pwd` ghcr.io/murphycj/compass:latest -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 50 --CNV 1
-```
-
 ## Usage
 
 `./COMPASS -i [sample_name] -o [output_name] --nchains 4 --chainlength 5000 --CNV 1 --sex female`
@@ -31,6 +26,12 @@ Where:
 * --chainlength indicate the number of iterations in each MCMC
 * --CNV can be set to 1 to use CNV, or 0 to only use mutations and CNLOH events
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
+
+
+### Use with Docker
+```
+docker run -t -v `pwd`:`pwd` -w `pwd` ghcr.io/cbg-ethz/compass:latest -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNV 1
+```
 
 ## Input
 COMPASS takes as input 2 files:
