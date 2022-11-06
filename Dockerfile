@@ -4,13 +4,16 @@ FROM ubuntu:latest
 LABEL author="Etienne Sollier" \
       description="COMPASS"
 
+RUN apt-get update && apt-get install -y make g++
+
 # Add the COMPASS source files to the container
-ADD . /usr/src/COMPASS
-WORKDIR /usr/src/COMPASS
+ADD . /app
+WORKDIR /app
+COPY . .
 
 # Install COMPASS
 RUN make
 
 # Set up entrypoint and cmd for easy docker usage
-ENTRYPOINT [ "COMPASS" ]
-CMD [ "." ]
+ENTRYPOINT [ "/app/COMPASS" ]
+CMD [ "COMPASS" ]
