@@ -27,12 +27,12 @@ jobs:
         with:
           push: true
           tags: |
-            ghcr.io/e-sollier/compass:dev
+            ghcr.io/cbg-ethz/compass:dev
       - name: Push release image
         uses: docker/build-push-action@v2
         if: github.event_name == 'release'
         with:
           push: true
           tags: |
-            ghcr.io/e-sollier/compass:${{ github.event.release.tag_name }}
-            ghcr.io/e-sollier/compass:latest
+            ghcr.io/cbg-ethz/compass:${{ github.event.release.tag_name }}
+            ghcr.io/cbg-ethz/compass:latest
