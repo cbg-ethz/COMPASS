@@ -623,7 +623,7 @@ void Tree::to_dot_pretty(std::string filename){
 
     // If filename ends with .gv: only output the tree in graphviz format. Otherwise output tree and cell assignments to nodes.
     bool full_output = true;
-    if (filename.substr(filename.size()-3)==".gv"){
+    if (filename.size()>3 &&  filename.substr(filename.size()-3)==".gv"){
         full_output = false;
     }
     std::string basename(filename);

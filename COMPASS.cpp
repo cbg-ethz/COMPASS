@@ -4,6 +4,7 @@
 #include <random>
 #include <fstream>
 #include <string.h>
+#include <stdexcept>
 #include <omp.h>
 
 #include "Inference.h"
@@ -35,6 +36,7 @@ int main(int argc, char* argv[]){
     data.sex = "female";
     //parameters.verbose=true;
     for (int i=1;i<argc-1;i++){
+        std::string argument{argv[i]};
         if (strcmp(argv[i],"-i")==0){
             input_file = argv[i+1];
         }
@@ -71,6 +73,23 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"--prettyplot")==0){
             if (strcmp(argv[i+1],"0")==0) output_simplified=false;
         }
+        else if (argument.substr(0,1)=="-"){
+            std::cout<<" Unrecognized argument: " <<argv[i]<<std::endl;
+            throw std::invalid_argument("Invalid argument: "+ argument);
+        }
+    }
+    if (input_file.size()==0){
+        if (argc==2){
+            input_file = argv[1];
+            std::cout << "Will use "<<argv[1]<<" as input."<<std::endl;
+        }
+        else{
+            throw std::invalid_argument("No input was provided. Please provide one with the -i option.");
+        }
+    }
+
+    if (output.size()==0){
+        std::cout << "No output name was provided. COMPASS will use the same basename as the input for the output." <<std::endl;
     }
 
     load_CSV(input_file,use_CNV,apply_filter_regions); 
@@ -114,7 +133,8 @@ int main(int argc, char* argv[]){
     else best_trees[best_score_index].to_dot(output);
 
     std::string gv_filename(output);
-    if (output.substr(output.size()-3)!=".gv"){
+    std::cout<<output.size() << std::endl;
+    if ( output.size()<= 3 || (output.size()>3 && output.substr(output.size()-3)!=".gv")){
         gv_filename = output + + "_tree.gv";
     }
     std::cout<<"Completed ! The output was written to "<<output<< ". You can visualize the tree by running: dot -Tpng "<<gv_filename<<" -o output.png"<<std::endl;
