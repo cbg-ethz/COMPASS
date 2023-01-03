@@ -2,14 +2,14 @@
 
 COpy number and Mutations Phylogeny from Amplicon Single-cell Sequencing
 
-This tool can be used to infer a tree of somatic events (mutations, copy number variants and copy-neutral loss of heterozygosity) that occurred in a tumor. It is specifically designed to be used for MissionBio's Tapestri data, where a small number of amplicons (50-300) are sequenced for thousands of single-cells.
+This tool can be used to infer a tree of somatic events (mutations and copy number alterations) that occurred in a tumor. It is specifically designed to be used for MissionBio's Tapestri data, where a small number of amplicons (50-300) are sequenced for thousands of single-cells.
 
 ## Quick start
 ```
 git clone https://github.com/cbg-ethz/COMPASS.git
 cd COMPASS
 make
-./COMPASS -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNV 1
+./COMPASS -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
 dot -Tpng -o AML-59-001_tree.png AML-59-001_tree.gv
 ```
 
@@ -17,14 +17,14 @@ Graphviz is required in order to plot the tree, which can be installed on Ubuntu
 
 ## Usage
 
-`./COMPASS -i [sample_name] -o [output_name] --nchains 4 --chainlength 5000 --CNV 1 --sex female`
+`./COMPASS -i [sample_name] -o [output_name] --nchains 4 --chainlength 5000 --CNA 1 --sex female`
 
 Where:
 * -i is the input sample name, see below for the format of the input files
 * -o is the output name. The output is a tree in graphviz format.
 * --nchains indicates the number of MCMC chains to run in parallel
 * --chainlength indicate the number of iterations in each MCMC
-* --CNV can be set to 1 to use CNV, or 0 to only use mutations and CNLOH events
+* --CNA can be set to 1 to use CNA, or 0 to only use mutations and CNLOH events
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
 
 
