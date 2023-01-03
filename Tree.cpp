@@ -1113,9 +1113,9 @@ bool Tree::select_regions(int index){
         double rootprob=0;
         for (double prob: nodes_regionprobs[0]){
             rootprob+= prob / nodes_regionprobs[0].size();
-            if (data.region_to_chromosome[k]!="X" || data.sex=="female") region_probabilities[k] = rootprob;
-            else region_probabilities[k] = rootprob*2; // region probability is defined for diploid
         }
+        if (data.region_to_chromosome[k]!="X" || data.sex=="female") region_probabilities[k] = rootprob;
+        else region_probabilities[k] = rootprob*2; // region probability is defined for diploid
 
         // Select regions whose probability is different between the root and another node
         for (int n=1;n<n_nodes;n++){
