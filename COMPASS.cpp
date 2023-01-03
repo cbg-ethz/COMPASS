@@ -29,7 +29,7 @@ int main(int argc, char* argv[]){
     int burn_in = 1000;
     double temperature=10;
     double betabin_overdisp = parameters.omega_het;
-    bool use_CNV=true;
+    bool use_CNA=true;
     bool apply_filter_regions = true;
     bool output_simplified = true;
     std::string output{};
@@ -61,8 +61,8 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"-d")==0){
             if (strcmp(argv[i+1],"0")==0) parameters.use_doublets=false;
         }
-        else if (strcmp(argv[i],"--CNV")==0){
-            if (strcmp(argv[i+1],"0")==0) use_CNV=false;
+        else if (strcmp(argv[i],"--CNA")==0){
+            if (strcmp(argv[i+1],"0")==0) use_CNA=false;
         }
         else if (strcmp(argv[i],"--filterregions")==0){
             if (strcmp(argv[i+1],"0")==0) apply_filter_regions=false;
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]){
         std::cout << "No output name was provided. COMPASS will use the same basename as the input for the output." <<std::endl;
     }
 
-    load_CSV(input_file,use_CNV,apply_filter_regions); 
+    load_CSV(input_file,use_CNA,apply_filter_regions); 
 
     parameters.omega_het = std::min(parameters.omega_het,betabin_overdisp);
     parameters.omega_het_indel = std::min(parameters.omega_het_indel,betabin_overdisp);
@@ -118,7 +118,7 @@ int main(int argc, char* argv[]){
 	for (int i=0;i<n_chains;i++){
 		std::srand(i);
 		Inference infer{"",temperature,i};
-        best_trees[i] = infer.find_best_tree(use_CNV,chain_length,burn_in);
+        best_trees[i] = infer.find_best_tree(use_CNA,chain_length,burn_in);
 		results[i]=best_trees[i].log_score;
 	}
     double best_score=-DBL_MAX;

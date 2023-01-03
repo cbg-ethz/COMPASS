@@ -46,9 +46,9 @@ Inference::~Inference(){
 
 Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
 
-    //First, find the best tree without CNV.
-    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting first phase (finding the best tree without CNV)."<<std::endl;
-    else std::cout<<"Starting first phase (finding the best tree without CNV)."<<std::endl;
+    //First, find the best tree without CNA.
+    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting first phase (finding the best tree without CNA)."<<std::endl;
+    else std::cout<<"Starting first phase (finding the best tree without CNA)."<<std::endl;
     mcmc(false, nb_steps,burn_in);
     if (!use_CNV){
         if (tree_name!="") best_tree.to_dot(tree_name+".gv");
@@ -64,10 +64,10 @@ Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
     
 
     if (tree_name!="") best_tree.to_dot(tree_name+"_noCNV.gv");
-    // Find best tree with CNV
-    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting second phase (finding the best tree with CNV)."<<std::endl;
-    else std::cout<<"Starting second phase (finding the best tree with CNV)."<<std::endl;
-    best_tree.allow_CNV();
+    // Find best tree with CNA
+    if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting second phase (finding the best tree with CNA)."<<std::endl;
+    else std::cout<<"Starting second phase (finding the best tree with CNA)."<<std::endl;
+    best_tree.allow_CNA();
     t = best_tree;
     t_prime = t;
     mcmc(true, nb_steps,0);
@@ -77,7 +77,7 @@ Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
     return best_tree;
 }
 
-void Inference::mcmc(bool use_CNV, int nb_steps,int burn_in){
+void Inference::mcmc(bool use_CNA, int nb_steps,int burn_in){
     best_tree = t;
     double best_log_score = -DBL_MAX;
     int move_id;
@@ -87,7 +87,7 @@ void Inference::mcmc(bool use_CNV, int nb_steps,int burn_in){
 
         int max_move_index=4;
         if (step>=burn_in) max_move_index=6;
-        if (step>burn_in && use_CNV) max_move_index = move_weights.size();
+        if (step>burn_in && use_CNA) max_move_index = move_weights.size();
 
         move_id = select_move(max_move_index);
         switch(move_id){
@@ -100,40 +100,32 @@ void Inference::mcmc(bool use_CNV, int nb_steps,int burn_in){
                 t_prime.swap_node_labels();
                 break;
             case 2:
-                if (parameters.verbose) std::cout<<"Selected move mutation"<<std::endl;
-                t_prime.move_mutation();
+                if (parameters.verbose) std::cout<<"Selected move SNV"<<std::endl;
+                t_prime.move_SNV();
                 break;
             case 3:
                 if (parameters.verbose) std::cout<<"Selected split/merge node"<<std::endl;
                 t_prime.split_merge_node();
                 break;
             case 4:
-                if (parameters.verbose) std::cout<<"Selected add/remove CNLOH"<<std::endl;
-                t_prime.add_remove_CNLOH();
+                if (parameters.verbose) std::cout<<"Selected add/remove CNA"<<std::endl;
+                t_prime.add_remove_CNA(use_CNA);
                 break;
             case 5:
-                if (parameters.verbose) std::cout<<"Selected move CNLOH"<<std::endl;
-                t_prime.move_CNLOH();
+                if (parameters.verbose) std::cout<<"Selected move CNA"<<std::endl;
+                t_prime.move_CNA();
                 break;
             case 6:
-                if (parameters.verbose) std::cout<<"Selected add/remove CNV"<<std::endl;
-                t_prime.add_remove_CNV();
+                if (parameters.verbose) std::cout<<"Selected merge or duplicate CNA"<<std::endl;
+                t_prime.merge_or_duplicate_CNA();
                 break;
             case 7:
-                if (parameters.verbose) std::cout<<"Selected move CNV"<<std::endl;
-                t_prime.move_CNV();
+                if (parameters.verbose) std::cout<<"Selected exchange Loss/CNLOH"<<std::endl;
+                t_prime.exchange_Loss_CNLOH();
                 break;
             case 8:
-                if (parameters.verbose) std::cout<<"Selected merge or duplicate CNV"<<std::endl;
-                t_prime.merge_or_duplicate_CNV();
-                break;
-            case 9:
-                if (parameters.verbose) std::cout<<"Selected exchange CNV/CNLOH"<<std::endl;
-                t_prime.exchange_CNV_CNLOH();
-                break;
-            case 10:
-                if (parameters.verbose) std::cout<<"Selected change alleles affected by CNV"<<std::endl;
-                t_prime.change_alleles_CNV();
+                if (parameters.verbose) std::cout<<"Selected change alleles affected by CNA"<<std::endl;
+                t_prime.change_alleles_CNA();
                 break;
         }
         double acceptance_ratio = 0.0;

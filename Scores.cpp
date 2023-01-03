@@ -181,12 +181,12 @@ std::vector<double> Scores::compute_SNV_loglikelihoods(int c_ref,int c_alt,int l
     return scores_cells;
 }
 
-std::vector<double> Scores::compute_CNV_loglikelihoods(int region, double region_proportion){
+std::vector<double> Scores::compute_CNA_loglikelihoods(int region, double region_proportion){
     // Compute the likelihood of the read count in the region, based on the negative binomial distribution (Gamma-Poisson)
     // theta is the scale parameter for the Gamma distribution.
     int discretized_region_proportion = std::round(region_proportion*1000);
     long int hash = region + 500*discretized_region_proportion;
-    if (cache_cnvlikelihood_cells.count(hash)) return cache_cnvlikelihood_cells[hash];
+    if (cache_cnalikelihood_cells.count(hash)) return cache_cnalikelihood_cells[hash];
 
 
     double theta = parameters.theta;
@@ -197,7 +197,7 @@ std::vector<double> Scores::compute_CNV_loglikelihoods(int region, double region
         cnv_loglikelihoods[j] = std::lgamma(cells[j].region_counts[region] + theta-1) + theta * std::log(theta / (theta + expected_read_count_region))
                                 + cells[j].region_counts[region] * std::log(expected_read_count_region / (expected_read_count_region+theta));
     }
-    cache_cnvlikelihood_cells[hash] = cnv_loglikelihoods;
+    cache_cnalikelihood_cells[hash] = cnv_loglikelihoods;
     count_cache++;
     return cnv_loglikelihoods;
 }
@@ -254,7 +254,7 @@ void Scores::clear_cache(){
     cache_dropoutrate_dropoutsalt.clear();
     cache_dropoutrate_dropoutsref.clear();
 
-    cache_cnvlikelihood_cells.clear();
+    cache_cnalikelihood_cells.clear();
 
     count_cache=0;
 }
