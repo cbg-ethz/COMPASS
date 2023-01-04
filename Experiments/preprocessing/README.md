@@ -28,4 +28,4 @@ In case, you already know which mutations to include in the analysis, the list o
 ## Population Frequency
 
 Optionally, the preprocessing script can take as input a tsv file containing the population frequency of variants. This is used in the preprocessing to remove germline variants (unless they appear to be affected by LOH in some cells) and, in COMPASS, to penalize variants with a high population frequency which are not placed at the root (since they are likely to be germline variants).
-The file that we used can be downloaded [here](https://polybox.ethz.ch/index.php/s/V5Wr1wCrAAZw1S5). It was generated using the script `download_1000G.sh`, which was adapted from [this script](https://github.com/single-cell-genetics/cellSNP/blob/master/SNPlist_1Kgenome.sh).
+The file that we used was generated using the script `download_1000G.sh`, which was adapted from [this script](https://github.com/single-cell-genetics/cellSNP/blob/master/SNPlist_1Kgenome.sh).
