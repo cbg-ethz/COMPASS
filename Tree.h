@@ -63,7 +63,7 @@ class Tree{
         bool rec_check_max_one_event_per_region_per_lineage(int node, std::vector<int> n_CNA_in_region);
 
 
-        void compute_attachment_scores(bool use_doublets_local);
+        void compute_attachment_scores(bool use_doublets_local,bool recompute_CNA_scores);
         void compute_likelihood(bool allow_diff_dropoutrates=true);
         void compute_prior_score();
         void update_full_score();

@@ -44,13 +44,13 @@ Inference::~Inference(){
     delete cache_scores;
 }
 
-Tree Inference::find_best_tree(bool use_CNV, int nb_steps, int burn_in){
+Tree Inference::find_best_tree(bool use_CNA, int nb_steps, int burn_in){
 
     //First, find the best tree without CNA.
     if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting first phase (finding the best tree without CNA)."<<std::endl;
     else std::cout<<"Starting first phase (finding the best tree without CNA)."<<std::endl;
     mcmc(false, nb_steps,burn_in);
-    if (!use_CNV){
+    if (!use_CNA){
         if (tree_name!="") best_tree.to_dot(tree_name+".gv");
         return best_tree;
     }

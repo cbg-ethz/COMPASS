@@ -67,6 +67,9 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"--filterregions")==0){
             if (strcmp(argv[i+1],"0")==0) apply_filter_regions=false;
         }
+        else if (strcmp(argv[i],"--verbose")==0){
+            if (strcmp(argv[i+1],"1")==0) parameters.verbose=true;
+        }
         else if (strcmp(argv[i],"--sex")==0){
            data.sex= std::string(argv[i+1]);
         }

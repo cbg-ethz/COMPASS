@@ -34,6 +34,8 @@ Node::Node(Node& source){
     affected_loci = source.affected_loci;
     affected_regions = source.affected_regions;
     attachment_scores = source.attachment_scores;
+    attachment_scores_SNV = source.attachment_scores_SNV;
+    attachment_scores_CNA = source.attachment_scores_CNA;
 
     cache_scores = source.cache_scores;
 
@@ -74,6 +76,8 @@ void Node::init_structures(){
     cn_regions.resize(n_regions);
 
     attachment_scores.resize(n_cells);
+    attachment_scores_SNV.resize(n_cells);
+    attachment_scores_CNA.resize(n_cells);
 }
 
 Node::~Node(){
@@ -202,41 +206,83 @@ void Node::update_genotype(Node* parent){
 void Node::compute_attachment_scores(bool use_CNA,const std::vector<double>& dropout_rates_ref,
                         const std::vector<double>& dropout_rates_alt, const std::vector<double>& region_probabilities){
     // Compute the attachment score of a cell to a node, starting from scratch (for the root).
-    for (int j=0;j<n_cells;j++) attachment_scores[j]=0;
+    for (int j=0;j<n_cells;j++){
+        attachment_scores_SNV[j]=0.0;
+        attachment_scores_CNA[j]=0.0;
+    }
     
     std::vector<double> temp_scores{};
     for (int i=0; i<n_loci;i++){
         temp_scores = cache_scores->compute_SNV_loglikelihoods(n_ref_allele[i],n_alt_allele[i],i,dropout_rates_ref[i],dropout_rates_alt[i]);
-        for (int j=0;j<n_cells;j++) attachment_scores[j]+=temp_scores[j];
+        for (int j=0;j<n_cells;j++){
+            attachment_scores_SNV[j]+=temp_scores[j];
+        }
+    }
+    for (int j=0;j<n_cells;j++){
+        attachment_scores[j] = attachment_scores_SNV[j];
     }
 
     // No CNA at the root allowed, so no need to compute CNA scores at the root (constant offset)
 }
 
 void Node::compute_attachment_scores_parent(bool use_CNA, Node* parent,const std::vector<double>& dropout_rates_ref,
-                            const std::vector<double>& dropout_rates_alt, const std::vector<double>& region_probabilities){
+                            const std::vector<double>& dropout_rates_alt, const std::vector<double>& region_probabilities,bool recompute_CNA_scores){
     // Compute the attachment score of a cell to a node, starting from the attachment score of the cell to the parent of the current node.
     // Only update the score for loci and regions where the genotype differs from the parent.
-    attachment_scores = parent->attachment_scores;
+    // The CNA scores need to be computed once per tree, because they do not depend on the parameters inferred during the MCMC.
+    attachment_scores_SNV = parent->attachment_scores_SNV;
     std::vector<double> temp_scores{};
     for (int i: affected_loci){
         temp_scores = cache_scores->compute_SNV_loglikelihoods(parent->n_ref_allele[i],parent->n_alt_allele[i],i,dropout_rates_ref[i],dropout_rates_alt[i]);
-        for (int j=0;j<n_cells;j++) attachment_scores[j]-=temp_scores[j];
-        temp_scores = cache_scores->compute_SNV_loglikelihoods(n_ref_allele[i],n_alt_allele[i],i,dropout_rates_ref[i],dropout_rates_alt[i]);
-                                                        
-        for (int j=0;j<n_cells;j++) attachment_scores[j]+=temp_scores[j];
+        for (int j=0;j<n_cells;j++) attachment_scores_SNV[j]-=temp_scores[j];
+        temp_scores = cache_scores->compute_SNV_loglikelihoods(n_ref_allele[i],n_alt_allele[i],i,dropout_rates_ref[i],dropout_rates_alt[i]);                                                
+        for (int j=0;j<n_cells;j++) attachment_scores_SNV[j]+=temp_scores[j];
     }
    
     if (use_CNA){
-        for (int k: affected_regions){
-            if (data.region_is_reliable[k]){
-                temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * parent->cn_regions[k]/2.0);
-                for (int j=0;j<n_cells;j++) attachment_scores[j]-=temp_scores[j];
-                temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * cn_regions[k]/2.0);
-                for (int j=0;j<n_cells;j++) attachment_scores[j]+=temp_scores[j];
+        if (true){
+            if (recompute_CNA_scores){ // Only compute the CNA scores once per tree.
+                attachment_scores_CNA = parent->attachment_scores_CNA;
+                if (affected_regions.size()>0){ // If there are no CNA, can keep the CNA score of the parent.
+                    double normalization_factor=0.0;
+                    double normalization_factor_parent=0.0;
+                    for (int k=0;k<n_regions;k++){
+                        if (data.region_is_reliable[k]){
+                            normalization_factor+= region_probabilities[k] *cn_regions[k];
+                            normalization_factor_parent+=region_probabilities[k] * parent->cn_regions[k];
+                        }
+                    }
+                    for (int k=0;k<n_regions;k++){
+                        if (data.region_is_reliable[k]){
+                            temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * parent->cn_regions[k]/ normalization_factor_parent);
+                            for (int j=0;j<n_cells;j++) attachment_scores_CNA[j]-=temp_scores[j];
+                            temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * cn_regions[k]/normalization_factor);
+                            for (int j=0;j<n_cells;j++) attachment_scores_CNA[j]+=temp_scores[j];
+                        }
+                    }
+                }
             }
         }
+        else{
+            for (int k: affected_regions){
+                if (data.region_is_reliable[k]){
+                    temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * parent->cn_regions[k]/2.0);
+                    for (int j=0;j<n_cells;j++) attachment_scores_CNA[j]-=temp_scores[j];
+                    temp_scores = cache_scores->compute_CNA_loglikelihoods(k,region_probabilities[k] * cn_regions[k]/2.0);
+                    for (int j=0;j<n_cells;j++) attachment_scores_CNA[j]+=temp_scores[j];
+                }
+            }
+        }
+        for (int j=0;j<n_cells;j++){
+            attachment_scores[j] = attachment_scores_SNV[j] + attachment_scores_CNA[j];
+        }
     }
+    else{
+        for (int j=0;j<n_cells;j++){
+            attachment_scores[j] = attachment_scores_SNV[j];
+        }
+    }
+    
 }
 
 
@@ -289,16 +335,16 @@ double Node::exchange_Loss_CNLOH(std::vector<int> candidate_regions){
         // Check if there is already a CNA affecting this region. In this case, might merge both CNLOH and CNA into a different CNA.
         // This can happen when we have a CNLOH of the ref allele and a copy number loss of one alt allele instead of a copy number loss of the ref allele.
         // TODO: this should not be possible if only one CNA per region is allowed in one lineage. 
-        for (auto CNA: CN_losses){
+        /*for (auto CNA: CN_losses){
             if (std::get<0>(CNA) == region){
                 hastings_ratio*=2.0;
                 if (std::rand()%2==0) CNA_events.erase(CNA_events.lower_bound(CNA));
             }
-        }
+        }*/
         CNA_events.erase(CNA_events.lower_bound(CNLOH_event));
         CNA_events.insert(std::make_tuple(region,-1,lost_alleles));
     }
-    else{ // transform Deletion into a CNLOH event
+    else{ // transform Loss into a CNLOH event
         std::tuple<int,int,std::vector<int>> CNA_event = *std::next(CN_losses.begin(), event_ind-n_CNLOH);
         int region = std::get<0>(CNA_event);
         std::vector<int> alleles = std::get<2>(CNA_event);

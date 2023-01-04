@@ -30,6 +30,8 @@ class Node {
 
 
     public:
+        std::vector<double> attachment_scores_SNV;
+        std::vector<double> attachment_scores_CNA;
         std::vector<double> attachment_scores;
 
         Node(Scores* cache); //constructor
@@ -45,7 +47,7 @@ class Node {
                                         const std::vector<double>& dropout_rates_alt,const std::vector<double>& region_probabilities);
         // just compute difference with parent
         void compute_attachment_scores_parent(bool use_CNA,Node* parent,const std::vector<double>& dropout_rates_ref,
-                                        const std::vector<double>& dropout_rates_alt,const std::vector<double>& region_probabilities);
+                                        const std::vector<double>& dropout_rates_alt,const std::vector<double>& region_probabilities,bool recompute_CNA_scores);
 
         // MCMC moves for the nodes
         void add_mutation(int locus){mutations.push_back(locus);}

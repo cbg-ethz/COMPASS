@@ -233,7 +233,7 @@ void Tree::compute_nodes_genotypes(){
 
 
 
-void Tree::compute_attachment_scores(bool use_doublets_local){
+void Tree::compute_attachment_scores(bool use_doublets_local, bool recompute_CNA_scores){
     // Compute the attachment scores of the nodes below node_index (including node_index) by performing a DFT
     std::stack<int> stk;
     stk.push(0);
@@ -246,7 +246,7 @@ void Tree::compute_attachment_scores(bool use_doublets_local){
         if (top==0) // root: compute score from scratch
             nodes[top]->compute_attachment_scores(use_CNA,dropout_rates_ref,dropout_rates_alt,region_probabilities);
         else // start from the parent score, and only compute the difference on loci/regions affected by events
-            nodes[top]->compute_attachment_scores_parent(use_CNA,nodes[parents[top]], dropout_rates_ref,dropout_rates_alt,region_probabilities);
+            nodes[top]->compute_attachment_scores_parent(use_CNA,nodes[parents[top]], dropout_rates_ref,dropout_rates_alt,region_probabilities,recompute_CNA_scores);
     }
 
     if (use_doublets_local){
@@ -265,14 +265,14 @@ void Tree::compute_attachment_scores(bool use_doublets_local){
                     int idx_parent;
                     if (parents[n1]>n1) idx_parent = n_nodes * n1 - (n1*(n1-1))/2 + parents[n1]-n1;
                     else idx_parent = n_nodes * parents[n1] - (parents[n1]*(parents[n1]-1))/2 + n1- parents[n1];
-                    doublets[idx]->compute_attachment_scores_parent(use_CNA,doublets[idx_parent],dropout_rates_ref,dropout_rates_alt,region_probabilities);
+                    doublets[idx]->compute_attachment_scores_parent(use_CNA,doublets[idx_parent],dropout_rates_ref,dropout_rates_alt,region_probabilities,recompute_CNA_scores);
                 } 
                 // compute doublet (n1,n2) from (n1,parent(n2)) (or (parent(n2),n1) )
                 else {
                     int idx_parent;
                     if (parents[n2]>n1) idx_parent = n_nodes * n1 - (n1*(n1-1))/2 + parents[n2]-n1;
                     else idx_parent = n_nodes * parents[n2] - (parents[n2]*(parents[n2]-1))/2 + n1- parents[n2];
-                    doublets[idx]->compute_attachment_scores_parent(use_CNA,doublets[idx_parent],dropout_rates_ref,dropout_rates_alt,region_probabilities);
+                    doublets[idx]->compute_attachment_scores_parent(use_CNA,doublets[idx_parent],dropout_rates_ref,dropout_rates_alt,region_probabilities,recompute_CNA_scores);
                 }
             }
         }
@@ -295,11 +295,13 @@ void Tree::compute_likelihood(bool allow_diff_dropoutrates){
     avg_diff_dropoutrates=10.0; // how much the dropout rates changed between 2 EM steps
 
     bool use_doublets_EM = false;
+    bool recompute_CNA_scores=true; // Compute CNA scores only once, because they do not depend on the dropout rates.
     int n_loops=0;
     while((avg_diff_nodeprob>0.0005|| avg_diff_dropoutrates>0.0001) && n_loops<100){
-        if (avg_diff_dropoutrates>0.0005) compute_attachment_scores(use_doublets_EM); // attachment scores of cells to nodes do not depend on node probabilities
+        if (avg_diff_dropoutrates>0.0005) compute_attachment_scores(use_doublets_EM,recompute_CNA_scores); // attachment scores of cells to nodes do not depend on node probabilities
         compute_cells_likelihoods(use_doublets_EM);
         EM_step(use_doublets_EM,false);
+        recompute_CNA_scores=false;
         n_loops++;
     }
     // See if likelihood can be improved by allowing, for some loci, the 2 alleles to have different dropout rates
@@ -307,7 +309,7 @@ void Tree::compute_likelihood(bool allow_diff_dropoutrates){
         EM_step(use_doublets_EM,true);
         n_loops=0;
         while((avg_diff_nodeprob>0.0005|| avg_diff_dropoutrates>0.0001) && n_loops<40){
-            if (avg_diff_dropoutrates>0.0005) compute_attachment_scores(use_doublets_EM); // attachment scores of cells to nodes do not depend on node probabilities
+            if (avg_diff_dropoutrates>0.0005) compute_attachment_scores(use_doublets_EM,recompute_CNA_scores); // attachment scores of cells to nodes do not depend on node probabilities
             compute_cells_likelihoods(use_doublets_EM);
             EM_step(use_doublets_EM,true);
             n_loops++;
@@ -315,7 +317,7 @@ void Tree::compute_likelihood(bool allow_diff_dropoutrates){
     }
     if (parameters.use_doublets && !use_doublets_EM){
         // if we did not use doublets for the EM algorithm, we need to recompute the scores with the doublets
-        compute_attachment_scores(parameters.use_doublets); 
+        compute_attachment_scores(parameters.use_doublets,true); 
         compute_cells_likelihoods(parameters.use_doublets);
     }
     log_likelihood=0;
@@ -1114,8 +1116,9 @@ bool Tree::select_regions(int index){
         for (double prob: nodes_regionprobs[0]){
             rootprob+= prob / nodes_regionprobs[0].size();
         }
-        if (data.region_to_chromosome[k]!="X" || data.sex=="female") region_probabilities[k] = rootprob;
-        else region_probabilities[k] = rootprob*2; // region probability is defined for diploid
+        //if (data.region_to_chromosome[k]!="X" || data.sex=="female") region_probabilities[k] = rootprob;
+        //else region_probabilities[k] = rootprob*2; // region probability is defined for diploid
+        region_probabilities[k] = rootprob;
 
         // Select regions whose probability is different between the root and another node
         for (int n=1;n<n_nodes;n++){
