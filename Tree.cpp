@@ -27,7 +27,7 @@ Tree::Tree(Scores* cache, bool use_CNA):
     use_CNA(use_CNA)
 {
     cache_scores = cache;
-    n_nodes = 6;
+    n_nodes = 3+ (std::rand()%8);
     dropout_rates = std::vector<double>(n_loci,0.05);
     dropout_rates_ref = std::vector<double>(n_loci,0.05);
     dropout_rates_alt = std::vector<double>(n_loci,0.05);

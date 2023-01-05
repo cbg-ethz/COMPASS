@@ -164,7 +164,7 @@ void Node::update_genotype(Node* parent){
         int gain_loss = std::get<1>(CNA);
         const std::vector<int>& alleles = std::get<2>(CNA);
         if (parameters.verbose) std::cout<<"CNA"<<gain_loss<<" in " <<data.region_to_name[region]<<std::endl;
-        affected_regions.insert(region);
+        if (gain_loss!=0) affected_regions.insert(region);
 
         // Check that the CNA is valid (region ends up with a copy number in {1,2,3} and affected alleles have copy number >0)
         bool valid_CNA=(cn_regions[region]+gain_loss>=1 & cn_regions[region]+gain_loss<=3);
