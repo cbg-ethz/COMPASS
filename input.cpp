@@ -21,7 +21,7 @@ extern Data data;
 extern Params parameters;
 
 
-void load_CSV(std::string base_name, bool use_CNA, bool apply_filter_regions){
+void load_CSV(std::string base_name, bool use_CNA){
     std::ifstream file_variants(base_name+"_variants.csv");
     if(!file_variants.is_open()) throw std::runtime_error("Could not open variants file");
     // Read region counts (if use CNA)
@@ -233,7 +233,7 @@ void load_CSV(std::string base_name, bool use_CNA, bool apply_filter_regions){
     }
     
     if (use_CNA){
-        if (apply_filter_regions) filter_regions();
+        if (parameters.filter_regions) filter_regions();
         else data.region_is_reliable = std::vector<bool>(n_regions,true);
     }
     else data.region_is_reliable = std::vector<bool>(n_regions,false);
@@ -249,18 +249,17 @@ void filter_regions(){
     // Filter out regions for which many cells have 0 (or almost 0) reads
     double threshold = 1.0 / n_regions / 15.0;
     data.region_is_reliable.clear();
-    std::string outverbose = "The following regions are excluded from the CNA inference because their coverage is too low: ";
     bool regions_filtered=false;
     for (int k=0;k<n_regions;k++){
         int count_cells_below_threshold=0;
         double mean=0;
         for (int j=0;j<n_cells;j++){
-            
             if (1.0*cells[j].region_counts[k] / cells[j].total_counts <= threshold) count_cells_below_threshold++;
             mean+= 1.0*cells[j].region_counts[k] / cells[j].total_counts / n_cells;
         }
+        std::cout<<data.region_to_name[k]<<": "<<1.0*count_cells_below_threshold/n_cells <<"    |    "<< mean << " / " << 0.2/n_regions<<std::endl;
         data.region_is_reliable.push_back(((1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions)));
-        regions_filtered = regions_filtered || (!(1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions));
+        regions_filtered = regions_filtered || ((1.0*count_cells_below_threshold/n_cells > 0.04) || (mean<0.2/n_regions));
     }
     if (regions_filtered){
         std::cout<<"The following regions are excluded from the CNA inference because their coverage is too low: ";
@@ -268,6 +267,9 @@ void filter_regions(){
             if (!data.region_is_reliable[k]) std::cout<<data.region_to_name[k]<<",";
         }
         std::cout<<std::endl;
+    }
+    else{
+        std::cout<<"No regions filtered "<<std::endl;
     }
     
 }
@@ -287,6 +289,8 @@ void init_params(){
 	parameters.doublet_rate=0.08;
 
     parameters.use_doublets=true;
+    parameters.filter_regions=true;
+    parameters.filter_regions_CNLOH=true;
     parameters.verbose=true;
 
     // Tree prior

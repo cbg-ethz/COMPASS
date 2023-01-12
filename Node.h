@@ -13,7 +13,7 @@ class Node {
         std::vector<int> mutations; //somatic mutations always transform from ref to alt. 
 
 
-        std::multiset<std::tuple<int,int,std::vector<int>>> CNA_events; // triplet (region_index,type,affected alleles)
+        std::vector<std::tuple<int,int,std::vector<int>>> CNA_events; // triplet (region_index,type,affected alleles)
         // the second element is +1 in case of copy number gain, -1 in case of copy number loss, and 0 in case of copy neutral event
         // the third element is a vector of length the number of loci in this region (potentially 0), 
         // and it contains 0 if the ref allele is deleted (Loss) / duplicated (Gain) / lost (copy neutral), or 1 for the alt allele
@@ -52,12 +52,24 @@ class Node {
         // MCMC moves for the nodes
         void add_mutation(int locus){mutations.push_back(locus);}
         int remove_random_mutation(); // removes a random mutation, and return the index of the mutation
-        void add_CNA(std::tuple<int,int,std::vector<int>> CNA){CNA_events.insert(CNA);}
+        void add_CNA(std::tuple<int,int,std::vector<int>> CNA){CNA_events.push_back(CNA);}
         std::tuple<int,int,std::vector<int>> remove_random_CNA();
-        void remove_CNA(std::tuple<int,int,std::vector<int>> CNA) {CNA_events.erase(CNA_events.lower_bound(CNA));}
+        void remove_CNA(std::tuple<int,int,std::vector<int>> CNA) {
+            int index=-1;
+            for (int i=0;i<CNA_events.size();i++){
+                if (std::get<0>(CNA_events[i])==std::get<0>(CNA) && std::get<1>(CNA_events[i])==std::get<1>(CNA) ){
+                    index=i;
+                }
+            }
+            if (index>=0){
+                CNA_events.erase(CNA_events.begin()+index);
+            }
+            
+        }
         //void remove_CNAs_in_region(int region);
         double exchange_Loss_CNLOH(std::vector<int> candidate_regions);
         void change_alleles_CNA();
+        void change_alleles_CNA_locus(int locus,bool heterozygous);
         
         // Various accessors
         bool is_empty(){ return (mutations.size()==0 && CNA_events.size()==0);}
@@ -70,7 +82,7 @@ class Node {
 
         //  Accessors for CNAs
         int get_cn_region(int region){return cn_regions[region];}
-        std::multiset<std::tuple<int,int,std::vector<int>>> get_CNA_events() {return CNA_events;}
+        std::vector<std::tuple<int,int,std::vector<int>>> get_CNA_events() {return CNA_events;}
         std::set<int> get_affected_regions(){return affected_regions;}
         bool get_all_CNA_valid(){return all_CNA_events_valid;}
         int get_number_CNA() {return CNA_events.size();}

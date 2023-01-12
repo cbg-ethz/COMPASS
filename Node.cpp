@@ -300,9 +300,9 @@ std::tuple<int,int,std::vector<int>> Node::remove_random_CNA(){
     // Randomly remove one of the existing CNA events and return it. 
     // This method should only be called if the node has at least one CNA event.
     int index_to_remove = std::rand()%CNA_events.size();
-    std::tuple<int,int,std::vector<int>> event = *std::next(CNA_events.begin(), index_to_remove);
-    CNA_events.erase(CNA_events.lower_bound(event)); // remove only one occurence of the event (multiset)
-    return event;
+    std::tuple<int,int,std::vector<int>> CNA = CNA_events[index_to_remove];
+    CNA_events.erase(CNA_events.begin()+index_to_remove); // remove only one occurence of the event (multiset)
+    return CNA;
 }
 
 
@@ -332,24 +332,24 @@ double Node::exchange_Loss_CNLOH(std::vector<int> candidate_regions){
         std::tuple<int,int,std::vector<int>> CNLOH_event = *std::next(CNLOH_events_exchangeable.begin(), event_ind);
         int region = std::get<0>(CNLOH_event);
         std::vector<int> lost_alleles = std::get<2>(CNLOH_event);
-        // Check if there is already a CNA affecting this region. In this case, might merge both CNLOH and CNA into a different CNA.
-        // This can happen when we have a CNLOH of the ref allele and a copy number loss of one alt allele instead of a copy number loss of the ref allele.
-        // TODO: this should not be possible if only one CNA per region is allowed in one lineage. 
-        /*for (auto CNA: CN_losses){
-            if (std::get<0>(CNA) == region){
-                hastings_ratio*=2.0;
-                if (std::rand()%2==0) CNA_events.erase(CNA_events.lower_bound(CNA));
+
+        // Replace the CNLOH with a loss
+        for (int i=0;i<CNA_events.size();i++){
+            if (std::get<0>(CNA_events[i])==region){
+                CNA_events[i] = std::make_tuple(region,-1,lost_alleles);
             }
-        }*/
-        CNA_events.erase(CNA_events.lower_bound(CNLOH_event));
-        CNA_events.insert(std::make_tuple(region,-1,lost_alleles));
+        }
     }
     else{ // transform Loss into a CNLOH event
         std::tuple<int,int,std::vector<int>> CNA_event = *std::next(CN_losses.begin(), event_ind-n_CNLOH);
         int region = std::get<0>(CNA_event);
         std::vector<int> alleles = std::get<2>(CNA_event);
-        CNA_events.erase(CNA_events.lower_bound(CNA_event));
-        CNA_events.insert(std::make_tuple(region,0,alleles));
+        // Replace the loss with a CNLOH
+        for (int i=0;i<CNA_events.size();i++){
+            if (std::get<0>(CNA_events[i])==region){
+                CNA_events[i] = std::make_tuple(region,0,alleles);
+            }
+        }
     }
     return hastings_ratio;
 }
@@ -366,13 +366,39 @@ void Node::change_alleles_CNA(){
     // Replace the affected alleles
     int region = std::get<0>(CNA);
     int gain_loss = std::get<1>(CNA);
-    CNA_events.erase(CNA_events.lower_bound(CNA));
     std::vector<int> alleles{};
     for (int i=0;i<data.region_to_loci[region].size();i++){
         int allele = std::rand()%2;
         alleles.push_back(allele);
     }
-    CNA_events.insert(std::make_tuple(region,gain_loss,alleles));
+    for (int i=0;i<CNA_events.size();i++){
+        if (std::get<0>(CNA_events[i])==region){
+            CNA_events[i] = std::make_tuple(region,gain_loss,alleles);
+        }
+    }
+}
+
+void Node::change_alleles_CNA_locus(int locus, bool heterozygous){
+    // Change the allele affected by a CNA, only at a particular locus
+    int region = data.locus_to_region[locus];
+    for (int i=0;i<CNA_events.size();i++){
+        if (std::get<0>(CNA_events[i])==region){
+            std::vector<int> alleles = std::get<2>(CNA_events[i]);
+            std::vector<int> new_alleles{};
+            for (int a=0;a<alleles.size();a++){
+                if (locus==data.region_to_loci[region][a]){
+                    if (heterozygous){
+                        new_alleles.push_back(std::rand()%2);
+                    }
+                    else{
+                        new_alleles.push_back(0);
+                    }
+                }
+                else new_alleles.push_back(alleles[a]);
+            }
+            CNA_events[i] = std::make_tuple(region,std::get<1>(CNA_events[i]),new_alleles);
+        }
+    }
 }
 
 

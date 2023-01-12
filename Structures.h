@@ -49,6 +49,8 @@ struct Params{
     double doublet_rate;
     
     bool use_doublets;
+    bool filter_regions;
+    bool filter_regions_CNLOH;
     bool verbose;
 
     // Penalties in the tree prior

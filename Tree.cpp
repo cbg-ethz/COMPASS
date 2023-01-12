@@ -772,7 +772,7 @@ void Tree::to_dot_pretty(std::string filename){
 
             //CNA
             out_file_json<<"\t\t\"CNA\": [";
-            std::multiset<std::tuple<int,int,std::vector<int>>> CNAs = nodes[k]->get_CNA_events();
+            std::vector<std::tuple<int,int,std::vector<int>>> CNAs = nodes[k]->get_CNA_events();
             if (CNAs.size()>0){
                 bool first=true;
                 for (auto CNA: CNAs){
@@ -1096,7 +1096,46 @@ bool Tree::select_regions(int index){
     // Find regions which might contain a non-copy-neutral CNA event. Return true if it was possible to estimate node regions (if the node contains enough cells), false otherwise.
     candidate_regions.clear();
     region_probabilities.resize(n_regions);
-    //  Compute average region probability in each node, and find if there is a difference between some nodes
+
+    // Compute number of cells attached to each node and make sure that there is a sufficient number of cells attached to the root
+    std::vector<int> nodes_nbcells(n_cells,0);
+    for (int j=0;j<n_cells;j++){
+        if (best_attachments[j]<n_nodes && best_attachments[j]>=0){
+            nodes_nbcells[best_attachments[j]]++;
+        }
+    }
+    int root=0;
+    if (nodes_nbcells[0]<std::max(40.0,0.015*n_cells)){ // not enough cells attached to the root
+        // If some nodes have CNLOH, try to use one node without CNLOH in its ancestors as the root.
+        std::vector<bool> CNLOH_in_ancestors(n_nodes,false);
+        bool CNLOH_in_tree=false;
+        int node_newroot=-1;
+        for (int n: DFT_order){
+            if (n>0){
+                if (nodes[n]->get_number_CNA()>0 || CNLOH_in_ancestors[parents[n]]){
+                    CNLOH_in_ancestors[n] = true;
+                    CNLOH_in_tree = true;
+                }
+                else{
+                    if (nodes_nbcells[n]>=std::max(40.0,0.015*n_cells) && node_newroot==-1){
+                        node_newroot=n;
+                    }
+                }
+            }
+        }
+        if (node_newroot==-1 && (!CNLOH_in_tree)){
+            if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+            std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs."<<std::endl;
+            return false; // not enough cells attached to the root: cannot find CNAs
+        }
+        else{
+            root = node_newroot;
+        }
+    }
+   
+
+
+    //  Compute average region probability in each node
     for (int k=0;k<n_regions;k++){
         if (!data.region_is_reliable[k]) continue;
         std::vector<std::vector<double>> nodes_regionprobs{};
@@ -1107,29 +1146,33 @@ bool Tree::select_regions(int index){
                 nodes_regionprobs[best_attachments[j]].push_back(1.0*cells[j].region_counts[k] / cells[j].total_counts);
             }
         }
-        if (nodes_regionprobs[0].size()<std::max(40.0,0.015*n_cells)){
+
+        if (nodes_regionprobs[root].size()<std::max(40.0,0.015*n_cells)){
             if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
-            std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs."<<std::endl;
+            std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs.."<<std::endl;
             return false; // not enough cells attached to the root: cannot find CNAs
         }
+        
         double rootprob=0;
-        for (double prob: nodes_regionprobs[0]){
-            rootprob+= prob / nodes_regionprobs[0].size();
+        for (double prob: nodes_regionprobs[root]){
+            rootprob+= prob / nodes_regionprobs[root].size();
         }
-        //if (data.region_to_chromosome[k]!="X" || data.sex=="female") region_probabilities[k] = rootprob;
-        //else region_probabilities[k] = rootprob*2; // region probability is defined for diploid
         region_probabilities[k] = rootprob;
 
         // Select regions whose probability is different between the root and another node
         for (int n=1;n<n_nodes;n++){
-            if (nodes_regionprobs[n].size()>=std::max(40.0,0.03*n_cells)){
-                double prob = 0;
-                for (double d: nodes_regionprobs[n]) prob+= d/nodes_regionprobs[n].size();
-                if ((prob>rootprob*1.275 || rootprob>prob*1.35) && rootprob>0.05/n_regions){
-                    candidate_regions.push_back(k);
-                    break;
+            
+            if (n!=root){
+                if (nodes_regionprobs[n].size()>=std::max(40.0,0.03*n_cells)){
+                    double prob = 0;
+                    for (double d: nodes_regionprobs[n]) prob+= d/nodes_regionprobs[n].size();
+                    if ((prob>rootprob*1.275 || rootprob>prob*1.35) && (rootprob>0.05/n_regions || (!parameters.filter_regions))){ 
+                        candidate_regions.push_back(k);
+                        break;
+                    }
                 }
             }
+            
         }
     }
     if (candidate_regions.size()==0){
@@ -1333,6 +1376,17 @@ void Tree::move_SNV(){
     nodes[destination_node]->add_mutation(mutation);
     if (nodes[destination_node]->get_number_mutations()==1) new_nb_nodes_with_events++;
 
+    // If some CNAs affect this locus, possibly change the alleles affected by the CNA.
+    std::vector<bool> below_mutation(n_nodes,false);
+    for (int n: DFT_order){
+        if (n==destination_node || (n>0 &&below_mutation[parents[n]]) ) below_mutation[n]=true;
+        for (auto CNA: nodes[n]->get_CNA_events()){
+            if (std::get<0>(CNA)==data.locus_to_region[mutation]){
+                nodes[n]->change_alleles_CNA_locus(mutation,below_mutation[n]);
+            }
+        }
+    }
+
     // If the source node is now empty, remove it.
     if (source_node !=0 && nodes[source_node]->is_empty()){
         // Delete the source node
@@ -1426,7 +1480,7 @@ void Tree::add_remove_CNA(bool use_CNA){
 
     std::vector<int> candidate_regions_CNLOH{};
     for (int k=0;k<n_regions;k++){
-        if (data.region_to_loci[k].size()>0) candidate_regions_CNLOH.push_back(k);
+        if (data.region_to_loci[k].size()>0 && (data.region_is_reliable[k] || (!parameters.filter_regions_CNLOH) )) candidate_regions_CNLOH.push_back(k);
     }
     if (candidate_regions.size() + candidate_regions_CNLOH.size()==0){
         hastings_ratio=0.0;

@@ -30,7 +30,6 @@ int main(int argc, char* argv[]){
     double temperature=10;
     double betabin_overdisp = parameters.omega_het;
     bool use_CNA=true;
-    bool apply_filter_regions = true;
     bool output_simplified = true;
     std::string output{};
     data.sex = "female";
@@ -65,7 +64,15 @@ int main(int argc, char* argv[]){
             if (strcmp(argv[i+1],"0")==0) use_CNA=false;
         }
         else if (strcmp(argv[i],"--filterregions")==0){
-            if (strcmp(argv[i+1],"0")==0) apply_filter_regions=false;
+            if (strcmp(argv[i+1],"0")==0){
+                parameters.filter_regions=false;
+                parameters.filter_regions_CNLOH=false;
+            }
+        }
+        else if (strcmp(argv[i],"--filterregionsCNLOH")==0){
+            if (strcmp(argv[i+1],"0")==0){
+                parameters.filter_regions_CNLOH=false;
+            }
         }
         else if (strcmp(argv[i],"--verbose")==0){
             if (strcmp(argv[i+1],"1")==0) parameters.verbose=true;
@@ -95,7 +102,7 @@ int main(int argc, char* argv[]){
         std::cout << "No output name was provided. COMPASS will use the same basename as the input for the output." <<std::endl;
     }
 
-    load_CSV(input_file,use_CNA,apply_filter_regions); 
+    load_CSV(input_file,use_CNA); 
 
     parameters.omega_het = std::min(parameters.omega_het,betabin_overdisp);
     parameters.omega_het_indel = std::min(parameters.omega_het_indel,betabin_overdisp);
