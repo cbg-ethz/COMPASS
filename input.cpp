@@ -257,7 +257,6 @@ void filter_regions(){
             if (1.0*cells[j].region_counts[k] / cells[j].total_counts <= threshold) count_cells_below_threshold++;
             mean+= 1.0*cells[j].region_counts[k] / cells[j].total_counts / n_cells;
         }
-        std::cout<<data.region_to_name[k]<<": "<<1.0*count_cells_below_threshold/n_cells <<"    |    "<< mean << " / " << 0.2/n_regions<<std::endl;
         data.region_is_reliable.push_back(((1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions)));
         regions_filtered = regions_filtered || ((1.0*count_cells_below_threshold/n_cells > 0.04) || (mean<0.2/n_regions));
     }

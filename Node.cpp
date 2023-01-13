@@ -410,12 +410,21 @@ int Node::get_number_disjoint_CNA(std::vector<int> regions_successor){
     // - they are on the same chromosome
     // - they are of the same type (Gain, Loss or CNLOH)
     int count=0;
-    int last_region=regions_successor.size()-1;
+    int last_region=-10;
     int last_type=-10;
     for (std::tuple<int,int,std::vector<int>> CNA:CNA_events){
         int region = std::get<0>(CNA);
         int type = std::get<1>(CNA);
-        if ( (last_region<regions_successor.size() && region!=regions_successor[last_region]) || type!=last_type){
+        bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
+        if (regions_adjacent){
+            if (type==0){
+                regions_adjacent = (region==last_region+1);
+            }
+            else{
+                regions_adjacent = (region==regions_successor[last_region]);
+            }
+        }
+        if ( last_type!=-10 && ((!regions_adjacent) || type!=last_type) ){
             count++;
         }
         last_region=region;
@@ -432,12 +441,21 @@ int Node::get_number_disjoint_LOH(std::vector<int> regions_successor){
     // Here, only count Losses and CNLOH in regions which contain a variant (resulting in a LOH)
     int count=0;
     bool segment_contains_LOH = false;
-    int last_region=regions_successor.size()-1;
+    int last_region=-10;
     int last_type=-10;
     for (std::tuple<int,int,std::vector<int>> CNA:CNA_events){
         int region = std::get<0>(CNA);
         int type = std::get<1>(CNA);
-        if ( (last_region<regions_successor.size() && region!=regions_successor[last_region]) || type!=last_type){
+        bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
+        if (regions_adjacent){
+            if (type==0){
+                regions_adjacent = (region==last_region+1);
+            }
+            else{
+                regions_adjacent = (region==regions_successor[last_region]);
+            }
+        }
+        if ( last_type!=-10 && ( (!regions_adjacent) || type!=last_type) ){
             if (segment_contains_LOH) count++;
            segment_contains_LOH = false;
         }
