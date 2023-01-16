@@ -415,17 +415,19 @@ int Node::get_number_disjoint_CNA(std::vector<int> regions_successor){
     for (std::tuple<int,int,std::vector<int>> CNA:CNA_events){
         int region = std::get<0>(CNA);
         int type = std::get<1>(CNA);
-        bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
-        if (regions_adjacent){
-            if (type==0){
-                regions_adjacent = (region==last_region+1);
+        if (last_type!=-10){
+            bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
+            if (regions_adjacent){
+                if (type==0){
+                    regions_adjacent = (region==last_region+1);
+                }
+                else{
+                    regions_adjacent = (region==regions_successor[last_region]);
+                }
             }
-            else{
-                regions_adjacent = (region==regions_successor[last_region]);
+            if ( last_type!=-10 && ((!regions_adjacent) || type!=last_type) ){
+                count++;
             }
-        }
-        if ( last_type!=-10 && ((!regions_adjacent) || type!=last_type) ){
-            count++;
         }
         last_region=region;
         last_type = type;
@@ -446,18 +448,20 @@ int Node::get_number_disjoint_LOH(std::vector<int> regions_successor){
     for (std::tuple<int,int,std::vector<int>> CNA:CNA_events){
         int region = std::get<0>(CNA);
         int type = std::get<1>(CNA);
-        bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
-        if (regions_adjacent){
-            if (type==0){
-                regions_adjacent = (region==last_region+1);
+        if (last_type!=-10){
+            bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
+            if (regions_adjacent){
+                if (type==0){
+                    regions_adjacent = (region==last_region+1);
+                }
+                else{
+                    regions_adjacent = (region==regions_successor[last_region]);
+                }
             }
-            else{
-                regions_adjacent = (region==regions_successor[last_region]);
+            if ( (!regions_adjacent) || type!=last_type) {
+                if (segment_contains_LOH) count++;
+            segment_contains_LOH = false;
             }
-        }
-        if ( last_type!=-10 && ( (!regions_adjacent) || type!=last_type) ){
-            if (segment_contains_LOH) count++;
-           segment_contains_LOH = false;
         }
         segment_contains_LOH = segment_contains_LOH || (data.region_to_loci[region].size()>0 && type<=0);
         last_region=region;

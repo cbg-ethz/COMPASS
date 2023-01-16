@@ -1123,7 +1123,7 @@ bool Tree::select_regions(int index){
                 }
             }
         }
-        if (node_newroot==-1 && (!CNLOH_in_tree)){
+        if (node_newroot==-1 || (!CNLOH_in_tree)){
             if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
             std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs."<<std::endl;
             return false; // not enough cells attached to the root: cannot find CNAs
