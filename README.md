@@ -30,7 +30,7 @@ Where:
 
 ### Use with Docker
 ```
-docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass:v1.1 COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNV 1
+docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass:v1.1 COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
 ```
 
 ## Input
