@@ -16,4 +16,4 @@ for chr in `seq 1 22` X; do
 	files_list="$files_list chr${chr}.vcf.gz"
 done
 
-bcftools concat $files_list | bcftools view -H -Oz -o 1000G.vcf
+bcftools concat $files_list | bcftools view -H -Ov -o 1000G.vcf

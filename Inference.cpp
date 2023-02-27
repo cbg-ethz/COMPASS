@@ -29,13 +29,11 @@ Inference::Inference(std::string name, double temperature, int index):
         0.5,    // Swap node labels
         1,      // Move mutation
         2,      // Split/merge node
-        1,      // Add/remove CNLOH
-        1,      // Move CNLOH
-        2,      // Add/Remove CNV
-        1,      // Move CNV
-        0.5,    // Merge or duplicate CNV
-        1,      // Exchange CNV/CNLOH
-        0.5     // Change alleles affected by CNV
+        3,      // Add/Remove CNA
+        1,      // Move CNA
+        0.5,    // Merge or duplicate CNA
+        1,      // Exchange Loss/CNLOH
+        1     // Change alleles affected by CNA
     };
     allow_diff_dropoutrates = true;
 }
@@ -51,19 +49,19 @@ Tree Inference::find_best_tree(bool use_CNA, int nb_steps, int burn_in){
     else std::cout<<"Starting first phase (finding the best tree without CNA)."<<std::endl;
     mcmc(false, nb_steps,burn_in);
     if (!use_CNA){
-        if (tree_name!="") best_tree.to_dot(tree_name+".gv");
+        if (tree_name!="") best_tree.to_dot(tree_name+".gv",false);
         return best_tree;
     }
 
     best_tree.select_regions(index); 
     if (!best_tree.contains_candidate_regions()){
         //If cannot find candidate regions which might contain a CNV (or if not cells are attached to the root), return now
-        if (tree_name!="") best_tree.to_dot(tree_name+".gv");
+        if (tree_name!="") best_tree.to_dot(tree_name+".gv",false);
         return best_tree;
     }
     
 
-    if (tree_name!="") best_tree.to_dot(tree_name+"_noCNV.gv");
+    if (tree_name!="") best_tree.to_dot(tree_name+"_noCNV.gv",false);
     // Find best tree with CNA
     if (index>=0) std::cout<<"Chain "<<std::to_string(index)<< ": Starting second phase (finding the best tree with CNA)."<<std::endl;
     else std::cout<<"Starting second phase (finding the best tree with CNA)."<<std::endl;
@@ -71,7 +69,7 @@ Tree Inference::find_best_tree(bool use_CNA, int nb_steps, int burn_in){
     t = best_tree;
     t_prime = t;
     mcmc(true, nb_steps,0);
-    if (tree_name!="") best_tree.to_dot(tree_name+".gv");
+    if (tree_name!="") best_tree.to_dot(tree_name+".gv",false);
 
 
     return best_tree;
@@ -86,7 +84,7 @@ void Inference::mcmc(bool use_CNA, int nb_steps,int burn_in){
         if (parameters.verbose) std::cout<<"MCMC step " <<step<<"  ----------------------------------------"<<std::endl;
 
         int max_move_index=4;
-        if (step>=burn_in) max_move_index=6;
+        if (step>=burn_in) max_move_index=7;
         if (step>burn_in && use_CNA) max_move_index = move_weights.size();
 
         move_id = select_move(max_move_index);

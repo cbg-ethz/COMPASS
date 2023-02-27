@@ -27,7 +27,7 @@ int main(int argc, char* argv[]){
     std::string regionweights_file{};
     int n_chains=4;
     int chain_length=5000;
-    int burn_in = -1;
+    int burn_in = 1000;
     double temperature=10;
     double betabin_overdisp = parameters.omega_het;
     bool use_CNA=true;
@@ -105,9 +105,6 @@ int main(int argc, char* argv[]){
     if (output.size()==0){
         std::cout << "No output name was provided. COMPASS will use the same basename as the input for the output." <<std::endl;
     }
-    if (burn_in==-1){
-        burn_in=chain_length/2;
-    }
 
     load_CSV(input_file,regionweights_file,use_CNA); 
 
@@ -150,6 +147,7 @@ int main(int argc, char* argv[]){
     else best_trees[best_score_index].to_dot(output,false);
 
     std::string gv_filename(output);
+    std::cout<<output.size() << std::endl;
     if ( output.size()<= 3 || (output.size()>3 && output.substr(output.size()-3)!=".gv")){
         gv_filename = output + + "_tree.gv";
     }

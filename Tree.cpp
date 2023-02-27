@@ -284,6 +284,19 @@ void Tree::compute_attachment_scores(bool use_doublets_local, bool recompute_CNA
 
 void Tree::compute_likelihood(bool allow_diff_dropoutrates){
     // Compute the likelihood by marginalizing over the attachment points
+
+    // Remove empty nodes
+    int n=1;
+    while (n<n_nodes){  
+        if (nodes[n]->is_empty()){
+            delete_node(n);
+            n=1;
+        }
+        else{
+            n+=1;
+        }
+    }
+
     compute_nodes_genotypes();
     cache_scores->clear_cache_if_too_large();
 
@@ -504,9 +517,11 @@ bool Tree::rec_check_max_one_event_per_region_per_lineage(int node, std::vector<
 void Tree::compute_prior_score(){
     // Penalize number of nodes
     log_prior_score=-n_nodes*(4+n_loci)*parameters.node_cost; 
-    // Forbid empty nodes
+    // Forbid empty nodes and penalize nodes with only CNAs (since the order of CNAs is generally less reliable)
     for (int i=1;i<n_nodes;i++){
         if (nodes[i]->get_number_mutations()==0 && nodes[i]->get_number_CNA()==0) log_prior_score-=100000;
+        if (nodes[i]->get_number_mutations()==0) log_prior_score-=(8+n_loci)*parameters.node_cost;
+        if (nodes[i]->get_number_mutations()==0 && nodes[i]->get_number_effective_LOH(nodes[parents[i]])==0) log_prior_score-=2*(8+n_loci)*parameters.node_cost;
     }
 
     // Penalize mutations which are not at the root
@@ -529,10 +544,6 @@ void Tree::compute_prior_score(){
         log_prior_score-= ncells_coef*parameters.LOH_cost * nodes[n]->get_number_disjoint_LOH(regions_successor);  
     }
 
-    // Penalize invalid CNA events
-    for (int n=0;n<n_nodes;n++){
-        if (!nodes[n]->get_all_CNA_valid()) log_prior_score-= 100000;
-    }
     // Cannot have a CNA event at the root.
     if (nodes[0]->get_number_CNA_noncopyneutral()>0) log_prior_score-= 100000; 
     // One lineage cannot have more than one CNA affecting each region (but it is still possible to have events affecting the same region in parallel branches)
@@ -557,56 +568,8 @@ void Tree::update_full_score(){
     log_score = log_likelihood + log_prior_score;
 }
 
-void Tree::to_dot(std::string filename){
-    // Save the tree structure in dot format (for visualization)
-    std::vector<std::string> colors{"lightcoral","skyblue3","sandybrown","paleturquoise3","thistle","darkolivegreen3","lightpink","mediumpurple",
-                    "darkseagreen3","navajowhite","gold"};
-    std::ofstream out_file(filename);
 
-    out_file <<"digraph G{"<<std::endl;
-    out_file <<"node [color=dimgray fontsize=24 fontcolor=black fontname=Helvetica penwidth=5];"<<std::endl;
-    for (int i=1;i<n_nodes;i++){
-        if (parameters.verbose) std::cout<<i<< " is a child of "<<parents[i]<<std::endl;
-        out_file<<parents[i]<<" -> "<<i<<" [color=dimgray penwidth=4 weight=2];"<<std::endl;
-    }
-
-    for (int i=0;i<n_nodes;i++){
-        out_file<<i<<"[label=<"<<nodes[i]->get_label()<<">];"<<std::endl;
-        if (parameters.verbose) std::cout<<i<<": "<<nodes[i]->get_label()<<std::endl;
-    }
-
-    for (int k=0;k<n_nodes;k++){
-        out_file<<k<<" -> "<<k+n_nodes<<" [dir=none style=dashed weight=1 penwidth=5 color="<<colors[k%colors.size()]<<"];"<<std::endl;
-    }
-    std::vector<int> count_nodes(n_nodes,0);
-    int total=0;
-    for (int j=0;j<n_cells;j++){
-        if (best_attachments[j]>=0 && best_attachments[j]<n_nodes){
-            count_nodes[best_attachments[j]]++;
-            total++;
-        }
-    }
-    for (int k=0;k<n_nodes;k++){
-        double size = std::sqrt(100.0*count_nodes[k]/total) /3.0;
-        out_file<<k+n_nodes<<"[label=\""<<count_nodes[k]<<" cells\\n"<<std::round(100.0*count_nodes[k]/total)<<"\\%\""<<" style = filled width="<<size
-        <<" height="<<size<<" color="<<colors[k%colors.size()]<<"];"<<std::endl;
-    }
-
-
-    out_file <<"}"<<std::endl;
-    out_file.close();
-    if (parameters.verbose) std::cout<<"Node probabilities"<<std::endl;
-    for (int n=0;n<n_nodes;n++){
-        if (parameters.verbose) std::cout<<n<<": "<<node_probabilities[n]<<std::endl;
-    }
-    if (parameters.verbose) std::cout<<"Dropout rates"<<std::endl;
-    for (int i=0;i<n_loci;i++){
-        if (parameters.verbose) std::cout<<i<<" ("<<data.locus_to_name[i]<<"): "<<dropout_rates[i]<<" (ref:" <<dropout_rates_ref[i]<<", alt:"<<dropout_rates_alt[i]<<")"<<std::endl;
-    }
-    
-}
-
-void Tree::to_dot_pretty(std::string filename){
+void Tree::to_dot(std::string filename, bool simplified){
     // Save the tree structure in dot format (for visualization)
 
     std::vector<std::string> colors{"lightcoral","skyblue3","sandybrown","paleturquoise3","thistle","darkolivegreen3","lightpink","mediumpurple",
@@ -635,20 +598,23 @@ void Tree::to_dot_pretty(std::string filename){
 
     // Identify mutations at the root which are not affected by a CNA
     std::set<int> excluded_mutations{};
-    if (n_nodes>0){
-        for (int m: nodes[0]->get_mutations()){
-            bool affected_by_event=false;
-            for (int n=0;n<n_nodes;n++){
-                for (auto CNA: nodes[n]->get_CNA_events()){
-                    if (data.locus_to_region[m]==std::get<0>(CNA)) affected_by_event = true;
+    if (simplified){
+        if (n_nodes>0){
+            for (int m: nodes[0]->get_mutations()){
+                bool affected_by_event=false;
+                for (int n=0;n<n_nodes;n++){
+                    for (auto CNA: nodes[n]->get_CNA_events()){
+                        if (data.locus_to_region[m]==std::get<0>(CNA)) affected_by_event = true;
+                    }
                 }
+                if (!affected_by_event) excluded_mutations.insert(m);
             }
-            if (!affected_by_event) excluded_mutations.insert(m);
         }
     }
 
     for (int i=0;i<n_nodes;i++){
-        out_file<<i<<"[label=<"<<nodes[i]->get_label_simple(excluded_mutations)<<">];"<<std::endl;
+        if (simplified) out_file<<i<<"[label=<"<<nodes[i]->get_label_simple(excluded_mutations)<<">];"<<std::endl;
+        else out_file<<i<<"[label=<"<<nodes[i]->get_label()<<">];"<<std::endl;
     }
 
     for (int k=0;k<n_nodes;k++){
@@ -772,7 +738,7 @@ void Tree::to_dot_pretty(std::string filename){
 
             //CNA
             out_file_json<<"\t\t\"CNA\": [";
-            std::vector<std::tuple<int,int,std::vector<int>>> CNAs = nodes[k]->get_CNA_events();
+            std::set<std::tuple<int,int,std::vector<int>>> CNAs = nodes[k]->get_CNA_events();
             if (CNAs.size()>0){
                 bool first=true;
                 for (auto CNA: CNAs){
@@ -1011,91 +977,11 @@ Tree::Tree(std::string gv_file, bool use_CNA_arg): //Create tree from a graphviz
     file.close();
 }
 
-
-void Tree::find_CNA(){
-    //1. Find best attachment point of each cell
-    int n_attachment_points = n_nodes;
-    double doublet_rate = parameters.doublet_rate;
-    if (parameters.use_doublets) n_attachment_points = (n_nodes*(n_nodes+3)) / 2; //can attach to a node or to a doublet
-    else doublet_rate=0.0;
-    double attach_log_lik;
-    std::vector<int> best_attachments(n_cells,-1);
-    double Z;
-    
-
-    std::vector<double> attach_prob{}; // Posterior probability of the attachments of a cell
-    attach_prob.resize(n_attachment_points);
-    //std::vector<std::vector<double>> cells_attach_prob{};
-    for (int j=0; j<n_cells; j++){ 
-        attach_prob.clear();
-        double best_attach_score=-DBL_MAX;
-        int best_attachment=-1;
-        for (int k=0; k<n_nodes;k++){
-            attach_log_lik = nodes[k]->attachment_scores[j] + std::log(node_probabilities[k]) +std::log(1-doublet_rate);
-            if (attach_log_lik>best_attach_score) {
-                best_attach_score=attach_log_lik;
-                best_attachment=k;
-            }
-        }
-        if (parameters.use_doublets){
-            int idx=0;
-            for (int k=0;k<n_nodes;k++){
-                for (int l=k;l<n_nodes;l++){
-                    attach_log_lik = doublets[idx]->attachment_scores[j] + std::log(node_probabilities[k]) 
-                    + std::log(node_probabilities[l]) +std::log(doublet_rate);
-                    if (k!=l)  attach_log_lik+= std::log(2); // the doublet (l,k) has the same probability as (k,l)
-                    idx++;
-                    if (attach_log_lik>best_attach_score) best_attachment=-1;
-                }
-            }
-        }
-        best_attachments[j] = best_attachment;
-    }
-
-    //2. Compute average region probability in each node, and find if there is a difference between some nodes
-    for (int i=0;i<n_regions;i++){
-        std::vector<std::vector<double>> nodes_regionprobs{};
-        std::vector<double> nodes_averages(n_nodes,0.0);
-        nodes_regionprobs.resize(n_nodes);
-        for (int j=0;j<n_cells;j++){
-            if (best_attachments[j]>=0){
-                nodes_regionprobs[best_attachments[j]].push_back(1.0*cells[j].region_counts[i] / cells[j].total_counts);
-            }
-        }
-        double min_prop=+DBL_MAX;
-        double max_prop=-DBL_MAX;
-        int min_node=-1;
-        int max_node=-1;
-        for (int k=0;k<n_nodes;k++){
-            if (nodes_regionprobs[k].size()>8){
-                double prop = 0;
-                for (double d: nodes_regionprobs[k]) prop+= d/nodes_regionprobs[k].size();
-                nodes_averages[k] = prop;
-                if (prop>max_prop){
-                    max_prop = prop;
-                    max_node = k;
-                }
-                if (prop<min_prop){
-                    min_prop = prop;
-                    min_node = k;
-                }
-            }
-        }
-        //if (max_prop>min_prop*1.1 && max_prop>0.1/n_regions){
-        if (true){
-            std::cout<<"candidate CNA in region "<<i<<" ("<<data.region_to_name[i]
-            <<"). Node "<<min_node<<": avg "<<min_prop<<", node "<<max_node<<": avg "<<max_prop <<" (ratio "<<max_prop/min_prop<<")"<<std::endl;
-            for (int k=0;k<n_nodes;k++){
-                if (nodes_regionprobs[k].size()>8) std::cout<<"node "<<k<<": size "<<nodes_regionprobs[k].size()<<", avg "<<nodes_averages[k]<<std::endl;
-            }
-        }
-    }
-}
-
 bool Tree::select_regions(int index){
     // Find regions which might contain a non-copy-neutral CNA event. Return true if it was possible to estimate node regions (if the node contains enough cells), false otherwise.
     candidate_regions.clear();
     region_probabilities.resize(n_regions);
+    int root=0;
 
     // Compute number of cells attached to each node and make sure that there is a sufficient number of cells attached to the root
     std::vector<int> nodes_nbcells(n_cells,0);
@@ -1104,75 +990,81 @@ bool Tree::select_regions(int index){
             nodes_nbcells[best_attachments[j]]++;
         }
     }
-    int root=0;
-    if (nodes_nbcells[0]<std::max(40.0,0.015*n_cells)){ // not enough cells attached to the root
-        // If some nodes have CNLOH, try to use one node without CNLOH in its ancestors as the root.
-        std::vector<bool> CNLOH_in_ancestors(n_nodes,false);
-        bool CNLOH_in_tree=false;
-        int node_newroot=-1;
-        for (int n: DFT_order){
-            if (n>0){
-                if (nodes[n]->get_number_CNA()>0 || CNLOH_in_ancestors[parents[n]]){
-                    CNLOH_in_ancestors[n] = true;
-                    CNLOH_in_tree = true;
-                }
-                else{
-                    if (nodes_nbcells[n]>=std::max(40.0,0.015*n_cells) && node_newroot==-1){
-                        node_newroot=n;
+
+    // Either used predetermined region weights or estimate them using cells attached to the root.
+    if (data.predetermined_region_weights.size()>0){
+        for (int k=0;k<n_regions;k++) region_probabilities[k] = data.predetermined_region_weights[k];
+    }
+    else{
+        if (nodes_nbcells[0]<std::max(40.0,0.015*n_cells)){ // not enough cells attached to the root
+            // If some nodes have CNLOH, try to use one node without CNLOH in its ancestors as the root.
+            std::vector<bool> CNLOH_in_ancestors(n_nodes,false);
+            bool CNLOH_in_tree=false;
+            int node_newroot=-1;
+            for (int n: DFT_order){
+                if (n>0){
+                    if (nodes[n]->get_number_CNA()>0 || CNLOH_in_ancestors[parents[n]]){
+                        CNLOH_in_ancestors[n] = true;
+                        CNLOH_in_tree = true;
+                    }
+                    else{
+                        if (nodes_nbcells[n]>=std::max(40.0,0.015*n_cells) && node_newroot==-1){
+                            node_newroot=n;
+                        }
                     }
                 }
             }
-        }
-        if (node_newroot==-1 || (!CNLOH_in_tree)){
-            if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
-            std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs."<<std::endl;
-            return false; // not enough cells attached to the root: cannot find CNAs
-        }
-        else{
-            root = node_newroot;
+            if (node_newroot==-1 || (!CNLOH_in_tree)){
+                if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+                std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root ("<<nodes_nbcells[0]<<") to estimate the region weights, so COMPASS could not attempt to find CNAs."<<std::endl;
+                return false; // not enough cells attached to the root: cannot find CNAs
+            }
+            else{
+                root = node_newroot;
+            }
         }
     }
-   
-
-
     //  Compute average region probability in each node
+    std::vector<std::vector<std::vector<double>>> nodes_regionprobs{};
+    nodes_regionprobs.resize(n_regions);
     for (int k=0;k<n_regions;k++){
         if (!data.region_is_reliable[k]) continue;
-        std::vector<std::vector<double>> nodes_regionprobs{};
         std::vector<double> nodes_averages(n_nodes,0.0);
-        nodes_regionprobs.resize(n_nodes);
+        nodes_regionprobs[k].resize(n_nodes);
+        for (int n=0;n<n_nodes;n++) nodes_regionprobs[k][n].clear();
         for (int j=0;j<n_cells;j++){
             if (best_attachments[j]<n_nodes && best_attachments[j]>=0){
-                nodes_regionprobs[best_attachments[j]].push_back(1.0*cells[j].region_counts[k] / cells[j].total_counts);
+                nodes_regionprobs[k][best_attachments[j]].push_back(1.0*cells[j].region_counts[k] / cells[j].total_counts);
             }
         }
 
-        if (nodes_regionprobs[root].size()<std::max(40.0,0.015*n_cells)){
-            if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
-            std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root to estimate the region weights, so COMPASS could not attempt to find CNAs.."<<std::endl;
-            return false; // not enough cells attached to the root: cannot find CNAs
+        if (data.predetermined_region_weights.size()==0){
+            if (nodes_regionprobs[k][root].size()<std::max(40.0,0.015*n_cells)){
+                if (index >=0) std::cout<<"Chain "<<std::to_string(index)<<": ";
+                std::cout<<"In the tree inferred without CNAs, there were not enough cells attached to the root ("<<nodes_nbcells[0]<<") to estimate the region weights, so COMPASS could not attempt to find CNAs.."<<std::endl;
+                return false; // not enough cells attached to the root: cannot find CNAs
+            }
+            double rootprob=0;
+            for (double prob: nodes_regionprobs[k][root]){
+                rootprob+= prob / nodes_regionprobs[k][root].size();
+            }
+            region_probabilities[k] = rootprob;
         }
-        
-        double rootprob=0;
-        for (double prob: nodes_regionprobs[root]){
-            rootprob+= prob / nodes_regionprobs[root].size();
-        }
-        region_probabilities[k] = rootprob;
-
-        // Select regions whose probability is different between the root and another node
+    }
+    // Select regions whose probability is different between the root and another node
+    for (int k=0;k<n_regions;k++){
+        if (!data.region_is_reliable[k]) continue;
         for (int n=1;n<n_nodes;n++){
-            
             if (n!=root){
-                if (nodes_regionprobs[n].size()>=std::max(40.0,0.03*n_cells)){
+                if (nodes_regionprobs[k][n].size()>=std::max(40.0,0.03*n_cells)){
                     double prob = 0;
-                    for (double d: nodes_regionprobs[n]) prob+= d/nodes_regionprobs[n].size();
-                    if ((prob>rootprob*1.275 || rootprob>prob*1.35) && (rootprob>0.05/n_regions || (!parameters.filter_regions))){ 
+                    for (double d: nodes_regionprobs[k][n]) prob+= d/nodes_regionprobs[k][n].size();
+                    if ((prob>region_probabilities[k]*1.275 || region_probabilities[k]>prob*1.35) && (region_probabilities[k]>0.05/n_regions || (!parameters.filter_regions))){ 
                         candidate_regions.push_back(k);
                         break;
                     }
                 }
             }
-            
         }
     }
     if (candidate_regions.size()==0){
@@ -1292,53 +1184,6 @@ void Tree::swap_node_labels(){
 
     hastings_ratio=1.0;
 }
-
-/*void Tree::add_remove_mutation(){
-    // Find nodes with mutations
-    std::vector<int> nodes_with_mut{};
-    for (int i=0;i<n_nodes;i++){
-        if (nodes[i]->get_number_mutations()>0) nodes_with_mut.push_back(i);
-    }
-    // Find mutations missing from the tree
-    std::set<int> mutations_missing{};
-    for (int i=0;i<n_loci;i++) mutations_missing.insert(i);
-    for (int i=0;i<n_nodes;i++){
-        for (int k: nodes[i]->get_mutations()) mutations_missing.erase(k);
-    }
-    //for (int k: mutations_missing) std::cout<<"mut "<<k<<" missing"<<std::endl;
-    double add_probability = 1.0*mutations_missing.size()/n_loci;
-    if (1.0*std::rand()/RAND_MAX<add_probability){
-        // Add mutation
-        //std::cout<<"Add mutation"<<std::endl;
-        // Select mutation to add among the missing ones
-        int mut = *std::next(mutations_missing.begin(), std::rand()%mutations_missing.size());
-        // Select node where to add the mutation
-        int node = std::rand()%n_nodes;
-        nodes[node]->add_mutation(mut);
-
-        // To reverse the move, we need to
-        // 1. select remove
-        // 2. select this node
-        // 3. select this mutation
-        
-        int n_nodes_with_mut= nodes_with_mut.size();
-        // if we added a mutation to a node that had no mutation, there is now one more node with mutations
-        if (nodes[node]->get_number_mutations()==1) n_nodes_with_mut++;
-        hastings_ratio = (1.0-add_probability)/add_probability *n_nodes / n_nodes_with_mut / nodes[node]->get_number_mutations() * mutations_missing.size();
-    }
-    else{
-        // Remove mutation
-        //std::cout<<"Remove mutation"<<std::endl;
-        // Select one node with at least a mutation
-        int node = nodes_with_mut[std::rand()%nodes_with_mut.size()];
-        int mut = nodes[node]->remove_mutation();
-        double new_add_prob = (1.0+mutations_missing.size()) / n_nodes;;
-
-        hastings_ratio = new_add_prob / (1.0-add_probability) * nodes_with_mut.size() / n_nodes 
-                        * (nodes[node]->get_number_mutations()+1.0) / (mutations_missing.size()+1);
-    }
-
-}*/
 
 void Tree::move_SNV(){
 
@@ -1486,6 +1331,7 @@ void Tree::add_remove_CNA(bool use_CNA){
         hastings_ratio=0.0;
         return;
     }
+    
     
     
 

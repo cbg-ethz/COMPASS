@@ -1,0 +1,244 @@
+import os
+from pathlib import Path
+import numpy as np
+import pandas as pd
+
+
+output_dir = "out/"
+seeds = list(range(20)) # 100
+nseeds = len(seeds)
+n_cells=[100,200,500,1000]
+n_nodes = [6] # 4,6,8
+n_regions = [30] #50
+n_SNVs= [7] #7,20,50
+n_CNAs= [3] #0,3,8
+dropout_sigma= [0.0]
+nodeprob_concentration= [10]
+regionprobs_sigma = [0.0] #0.0,0.1,0.3,0.5,0.7
+dropout_rates=[0.05]
+doublet_rates= [0.0]
+theta = 1000
+depth=20
+
+
+
+
+Path(output_dir+"tmp/").mkdir(parents=True, exist_ok=True)
+
+
+rule all:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        output_dir+"results.csv"
+        #"error_statistics.csv"
+
+
+rule combine_results:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        output_dir+"results_COMPASS.csv",
+        output_dir+"results_COMPASS-doublet.csv",
+        output_dir+"results_BITSC2.csv",
+        output_dir+"results_infSCITE.csv",
+        output_dir+"results_infSCITE-doublet.csv"
+    output:
+        output_dir+"results.csv"
+    run:
+        dfs = [pd.read_csv(results_file) for results_file in input]
+        df = pd.concat(dfs)
+        df.to_csv(output_dir+"results.csv",index=False)
+
+#all_files = [output_dir+"MP3/6nnodes_7nSNVs_2nCNAs_30nregions_0.0rhosigma_10nodeprob_0.5dropoutrate_0.0doubletrate_0seed_COMPASS_MP3.txt",
+#            output_dir+"MP3/6nnodes_7nSNVs_2nCNAs_30nregions_0.0rhosigma_10nodeprob_0.5dropoutrate_0.0doubletrate_1seed_COMPASS_MP3.txt"]
+rule combine_results_method:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        expand(output_dir+"MP3/{ncells}ncells_{nnodes}nnodes_{nSNVs}nSNVs_{nCNAs}nCNAs_{nregions}nregions_{rhosigma}rhosigma_"\
+        "{nodeprob}nodeprob_{dropoutrate}dropoutrate_{doubletrate}doubletrate_{seed}seed_{{method}}_MP3.txt",
+        ncells=n_cells,nnodes=n_nodes,nSNVs=n_SNVs,nCNAs=n_CNAs,nregions=n_regions,rhosigma=regionprobs_sigma,nodeprob=nodeprob_concentration,dropoutrate=dropout_rates,
+        doubletrate=doublet_rates,seed=seeds)
+    output:
+        output_dir+"results_{method}.csv"
+    run:
+        #d={"nodes":[],"SNVs":[],"CNAs":[],"rho":[],"method":[],"MP3":[]}
+        params = ["ncells","nnodes","nSNVs","nCNAs","nregions","rhosigma","nodeprob","dropoutrate","doubletrate","seed"]
+        d = {param:[] for param in params}
+        d["method"] = []
+        d["MP3"] = []
+        d["MP3-SNV"] = []
+        d["MP3-CNA"] = []
+        for infile in input:
+            print(infile)
+            with open(infile,"r") as f:
+                d["MP3"].append(float(f.readline()))
+            with open(infile[:-4]+"-SNV.txt","r") as f:
+                d["MP3-SNV"].append(float(f.readline()))
+            with open(infile[:-4]+"-CNA.txt","r") as f:
+                d["MP3-CNA"].append(float(f.readline()))
+
+            for param in params:
+                d[param].append(extract_param(infile.split("/")[-1],param))
+            d["method"].append(wildcards.method)
+
+        df = pd.DataFrame(d)
+        df.to_csv(output_dir+"results_"+wildcards.method+".csv",index=False)
+
+def sample2cla(sample):
+    """ From a sample name, create the command line arguments"""
+    s=""
+    possible_arguments = ["ncells","nnodes","nSNVs","nCNAs","nregions","rhosigma","nodeprob","dropoutrate","doubletrate","seed"]
+    for x in sample.split("_"):
+        for a in possible_arguments:
+            if x.endswith(a):
+                s+= "--"+a+" "+x.rstrip(a)+" "
+    return s
+
+def extract_param(sample,param):
+    for x in sample.split("_"):
+        if x.endswith(param):
+            return x.rstrip(param)
+    return 0
+
+
+
+rule generate_synthetic_data:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000",
+        cla=lambda wcs: sample2cla(wcs.sample)
+    output:
+        output_dir+"syndata/{sample}_variants.csv",
+        output_dir+"syndata/{sample}_regions.csv",
+        output_dir+"syndata/{sample}_genotypes.csv",
+        output_dir+"syndata/{sample}_DP.csv",
+        output_dir+"syndata/{sample}_treeTRUE.gv"
+    shell:
+        "python generate_synthetic_data.py -o {output_dir}/syndata/{wildcards.sample} {params.cla} --theta {theta} --depth {depth} --allow_cnloh 0"
+
+
+rule compute_MP3:
+    params:
+        threads="1",
+        runtime="10",
+        memory="6G",
+        cellAssignments_true = lambda wcs: output_dir+"syndata/"+wcs.sample+"_cellAssignmentsTRUE.tsv",
+        cellAssignments_inferred = lambda wcs: output_dir+wcs.method+"/"+wcs.sample+"_cellAssignments.tsv"
+    input:
+        true=output_dir+"syndata/{sample}_treeTRUE.gv",
+        inferred=output_dir+"{method}/{sample}_tree.gv"
+    output:
+        full = output_dir+"MP3/{sample}_{method}_MP3.txt",
+        SNV = output_dir+"MP3/{sample}_{method}_MP3-SNV.txt",
+        CNA = output_dir+"MP3/{sample}_{method}_MP3-CNA.txt",
+        assignments = output_dir+"AssignmentsAccuracy/{sample}_{method}_assignmentsAccuracy.txt"
+    shell:
+        """
+        python compute_MP3.py -i1 {input.true} -i2 {input.inferred} --tmp {output_dir}tmp/{wildcards.sample}_{wildcards.method} -o {output.full};
+        python compute_MP3.py -i1 {input.true} -i2 {input.inferred} --tmp {output_dir}tmp/{wildcards.sample}_{wildcards.method}_SNV -o {output.SNV} --useCNA 0;
+        python compute_MP3.py -i1 {input.true} -i2 {input.inferred} --tmp {output_dir}tmp/{wildcards.sample}_{wildcards.method}_CNA -o {output.CNA} --useSNV 0;
+        python compute_cellAssignments_accuracy.py -i1 {input.true} -i2 {input.inferred} -a1 {params.cellAssignments_true} -a2 {params.cellAssignments_inferred} -o {output.assignments}
+        """
+
+
+rule run_COMPASS:
+    params:
+        threads="4",
+        runtime="2:50",
+        memory="6000",
+        basename= lambda wcs: output_dir+"syndata/"+wcs.sample
+    input:
+        output_dir+"syndata/{sample}_variants.csv",
+        output_dir+"syndata/{sample}_regions.csv"
+    output:
+        output_dir+"COMPASS/{sample}_tree.gv"
+    benchmark:
+        output_dir+"benchmarks/{sample}_COMPASS.txt"
+    shell:
+        "./COMPASS -o {output_dir}COMPASS/{wildcards.sample} -i {params.basename} --nchains 4 --chainlength 10000 --burnin 6000 --temperature 10 -d 0 --filterregions 0 --prettyplot 0"
+
+rule run_COMPASS_doublet:
+    params:
+        threads="4",
+        runtime="4:50",
+        memory="6000",
+        basename= lambda wcs: output_dir+"syndata/"+wcs.sample
+    input:
+        output_dir+"syndata/{sample}_variants.csv",
+        output_dir+"syndata/{sample}_regions.csv"
+    output:
+        output_dir+"COMPASS-doublet/{sample}_tree.gv"
+    benchmark:
+        output_dir+"benchmarks/{sample}_COMPASS-doublet.txt"
+    shell:
+        "./COMPASS -o {output_dir}COMPASS-doublet/{wildcards.sample} -i {params.basename} --nchains 4 --chainlength 10000 --burnin 6000 --temperature 10 --filterregions 0 --prettyplot 0"
+
+
+rule run_infSCITE:
+    params:
+        threads="1",
+        runtime="55",
+        memory="2000",
+        ncells= lambda wcs: str(extract_param(wcs.sample,"ncells")),
+        nSNVs = lambda wcs: str(extract_param(wcs.sample,"nSNVs"))
+    input:
+        output_dir+"syndata/{sample}_genotypes.csv",
+    output:
+        gv=output_dir+"infSCITE/{sample}_map0.gv",
+        gv2=output_dir+"infSCITE/{sample}_tree.gv"
+    benchmark:
+        output_dir+"benchmarks/{sample}_infSCITE.txt"
+    shell:
+        """
+        ./infSCITE -i {input} -o {output_dir}infSCITE/{wildcards.sample} -n {params.nSNVs} -m {params.ncells} -r 4 -l 20000 -fd 0.01 -ad 0.04 0.04 -cc 0.01 -s -a
+        python convert_tree_SCITE.py -i {output.gv} -o {output_dir}infSCITE/{wildcards.sample} --writeindices --removeemptynodes
+        """
+
+rule run_infSCITE_doublet:
+    params:
+        threads="1",
+        runtime="22:00",
+        memory="2G",
+        ncells= lambda wcs: str(extract_param(wcs.sample,"ncells")),
+        nSNVs = lambda wcs: str(extract_param(wcs.sample,"nSNVs"))
+    input:
+        gv=output_dir+"syndata/{sample}_genotypes.csv"
+    output:
+        gv=output_dir+"infSCITE-doublet/{sample}_map0.gv",
+        gv2=output_dir+"infSCITE-doublet/{sample}_tree.gv"
+    benchmark:
+        output_dir+"benchmarks/{sample}_infSCITE-doublet.txt"
+    shell:
+        """
+        ./infSCITE -i {input} -o {output_dir}infSCITE-doublet/{wildcards.sample} -n {params.nSNVs} -m {params.ncells} -r 4 -l 6000 -fd 0.01 -ad 0.04 0.04 -cc 0.01 -s -d -a;
+        python convert_tree_SCITE.py -i {output.gv} -o {output_dir}infSCITE-doublet/{wildcards.sample}
+        """
+
+rule infer_tree_BITSC2:
+    params:
+        runtime="58:00",
+        threads="1",
+        memory="6000",
+        nnodes = lambda wcs: str(1+int(extract_param(wcs.sample,"nnodes"))),
+        basename= lambda wcs: output_dir+"syndata/"+wcs.sample
+    input:
+        output_dir+"syndata/{sample}_DP.csv"
+    output:
+        treegv=output_dir+"BITSC2/{sample}_tree.gv"
+    benchmark:
+        output_dir+"benchmarks/{sample}_BITSC2.txt"
+    shell:
+        """
+        Rscript --vanilla BiTSC2/BiTSC2_script.R {params.basename} {output_dir}BITSC2/{wildcards.sample} 5000 {depth} {params.nnodes};
+        python convert_tree_BITSC2.py -i {output_dir}BITSC2/{wildcards.sample} -o {output_dir}BITSC2/{wildcards.sample}  --metadata {params.basename} --writeindices
+        """
+

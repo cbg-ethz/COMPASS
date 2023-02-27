@@ -158,7 +158,8 @@ void Node::update_genotype(Node* parent){
 
 
 
-    all_CNA_events_valid = true;
+    // Make sure that the CNAs are valid. If yes, apply them. Otherwise discard them.
+    CNAs_to_remove.clear();
     for (const std::tuple<int,int,std::vector<int>> CNA: CNA_events){
         int region = std::get<0>(CNA);
         int gain_loss = std::get<1>(CNA);
@@ -198,9 +199,10 @@ void Node::update_genotype(Node* parent){
             }   
         }
         else{
-            all_CNA_events_valid = false;
+            CNAs_to_remove.push_back(CNA);
         }
     }
+    for (auto CNA: CNAs_to_remove) remove_CNA(CNA);
 }
 
 void Node::compute_attachment_scores(bool use_CNA,const std::vector<double>& dropout_rates_ref,
@@ -300,8 +302,8 @@ std::tuple<int,int,std::vector<int>> Node::remove_random_CNA(){
     // Randomly remove one of the existing CNA events and return it. 
     // This method should only be called if the node has at least one CNA event.
     int index_to_remove = std::rand()%CNA_events.size();
-    std::tuple<int,int,std::vector<int>> CNA = CNA_events[index_to_remove];
-    CNA_events.erase(CNA_events.begin()+index_to_remove); // remove only one occurence of the event (multiset)
+    std::tuple<int,int,std::vector<int>> CNA = *std::next(CNA_events.begin(), index_to_remove);
+    CNA_events.erase(CNA); 
     return CNA;
 }
 
@@ -332,24 +334,15 @@ double Node::exchange_Loss_CNLOH(std::vector<int> candidate_regions){
         std::tuple<int,int,std::vector<int>> CNLOH_event = *std::next(CNLOH_events_exchangeable.begin(), event_ind);
         int region = std::get<0>(CNLOH_event);
         std::vector<int> lost_alleles = std::get<2>(CNLOH_event);
-
-        // Replace the CNLOH with a loss
-        for (int i=0;i<CNA_events.size();i++){
-            if (std::get<0>(CNA_events[i])==region){
-                CNA_events[i] = std::make_tuple(region,-1,lost_alleles);
-            }
-        }
+        CNA_events.erase(CNLOH_event);
+        CNA_events.insert(std::make_tuple(region,-1,lost_alleles));
     }
     else{ // transform Loss into a CNLOH event
         std::tuple<int,int,std::vector<int>> CNA_event = *std::next(CN_losses.begin(), event_ind-n_CNLOH);
         int region = std::get<0>(CNA_event);
         std::vector<int> alleles = std::get<2>(CNA_event);
-        // Replace the loss with a CNLOH
-        for (int i=0;i<CNA_events.size();i++){
-            if (std::get<0>(CNA_events[i])==region){
-                CNA_events[i] = std::make_tuple(region,0,alleles);
-            }
-        }
+        CNA_events.erase(CNA_event);
+        CNA_events.insert(std::make_tuple(region,0,alleles));
     }
     return hastings_ratio;
 }
@@ -365,25 +358,24 @@ void Node::change_alleles_CNA(){
     std::tuple<int,int,std::vector<int>> CNA = CNA_with_muts[std::rand()%CNA_with_muts.size()];
     // Replace the affected alleles
     int region = std::get<0>(CNA);
-    int gain_loss = std::get<1>(CNA);
+    int type = std::get<1>(CNA);
     std::vector<int> alleles{};
     for (int i=0;i<data.region_to_loci[region].size();i++){
         int allele = std::rand()%2;
         alleles.push_back(allele);
     }
-    for (int i=0;i<CNA_events.size();i++){
-        if (std::get<0>(CNA_events[i])==region){
-            CNA_events[i] = std::make_tuple(region,gain_loss,alleles);
-        }
-    }
+    CNA_events.erase(CNA);
+    CNA_events.insert(std::make_tuple(region,type,alleles));
 }
 
 void Node::change_alleles_CNA_locus(int locus, bool heterozygous){
     // Change the allele affected by a CNA, only at a particular locus
     int region = data.locus_to_region[locus];
-    for (int i=0;i<CNA_events.size();i++){
-        if (std::get<0>(CNA_events[i])==region){
-            std::vector<int> alleles = std::get<2>(CNA_events[i]);
+    std::tuple<int,int,std::vector<int>> CNA_to_remove;
+    std::tuple<int,int,std::vector<int>> CNA_to_add;
+    for (auto CNA: CNA_events){
+        if (std::get<0>(CNA)==region){
+            std::vector<int> alleles = std::get<2>(CNA);
             std::vector<int> new_alleles{};
             for (int a=0;a<alleles.size();a++){
                 if (locus==data.region_to_loci[region][a]){
@@ -396,9 +388,12 @@ void Node::change_alleles_CNA_locus(int locus, bool heterozygous){
                 }
                 else new_alleles.push_back(alleles[a]);
             }
-            CNA_events[i] = std::make_tuple(region,std::get<1>(CNA_events[i]),new_alleles);
+            CNA_to_remove = CNA;
+            CNA_to_add = std::make_tuple(region,std::get<1>(CNA),new_alleles);
         }
     }
+    CNA_events.erase(CNA_to_remove);
+    CNA_events.insert(CNA_to_add);
 }
 
 
@@ -416,14 +411,10 @@ int Node::get_number_disjoint_CNA(std::vector<int> regions_successor){
         int region = std::get<0>(CNA);
         int type = std::get<1>(CNA);
         if (last_type!=-10){
-            bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
+            bool regions_adjacent = (data.region_to_chromosome[region]==data.region_to_chromosome[last_region]);
             if (regions_adjacent){
-                if (type==0){
-                    regions_adjacent = (region==last_region+1);
-                }
-                else{
-                    regions_adjacent = (region==regions_successor[last_region]);
-                }
+                if (type==0)regions_adjacent = (region==last_region+1);
+                else regions_adjacent = (region==regions_successor[last_region]);
             }
             if ( last_type!=-10 && ((!regions_adjacent) || type!=last_type) ){
                 count++;
@@ -432,6 +423,7 @@ int Node::get_number_disjoint_CNA(std::vector<int> regions_successor){
         last_region=region;
         last_type = type;
     }
+    if (last_type!=-10) count++;
     return count;
 }
 
@@ -451,16 +443,12 @@ int Node::get_number_disjoint_LOH(std::vector<int> regions_successor){
         if (last_type!=-10){
             bool regions_adjacent = data.region_to_chromosome[region]==data.region_to_chromosome[last_region];
             if (regions_adjacent){
-                if (type==0){
-                    regions_adjacent = (region==last_region+1);
-                }
-                else{
-                    regions_adjacent = (region==regions_successor[last_region]);
-                }
+                if (type==0) regions_adjacent = (region==last_region+1);
+                else regions_adjacent = (region==regions_successor[last_region]);
             }
             if ( (!regions_adjacent) || type!=last_type) {
                 if (segment_contains_LOH) count++;
-            segment_contains_LOH = false;
+                segment_contains_LOH = false;
             }
         }
         segment_contains_LOH = segment_contains_LOH || (data.region_to_loci[region].size()>0 && type<=0);

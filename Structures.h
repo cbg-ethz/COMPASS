@@ -29,7 +29,7 @@ struct Data{
     std::vector<std::string> region_to_chromosome;
     std::vector<std::string> region_to_name;
     std::vector<bool> region_is_reliable; // true for the amplicons that are used for computing the CNV score.
-
+    std::vector<double> predetermined_region_weights; // probability for a read to fall in each of the regions, when these values are given as input and not inferred (otherwise they will be inferred by using the cells attached at the root)
 };
 
 struct Params{

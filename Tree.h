@@ -77,8 +77,7 @@ class Tree{
         void EM_step(bool use_doublets_local, bool allow_diff_dropoutrates); // compute the attachment probabilities of each cell (E step) and update the node probabilities and dropout rates (M step)
 
 
-        void to_dot(std::string filename); //save the tree structure to the dot format (for visualization)
-        void to_dot_pretty(std::string filename); //save the tree structure to the dot format (for visualization)
+        void to_dot(std::string filename, bool simplified); //save the tree structure to the dot format (for visualization)
 
         void find_CNA();
         void allow_CNA(){use_CNA=true;}
