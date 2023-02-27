@@ -9,7 +9,7 @@ This tool can be used to infer a tree of somatic events (mutations and copy numb
 git clone https://github.com/cbg-ethz/COMPASS.git
 cd COMPASS
 make
-./COMPASS -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
+./COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
 dot -Tpng -o AML-59-001_tree.png AML-59-001_tree.gv
 ```
 
@@ -24,13 +24,13 @@ Where:
 * -o is the output name. The output is a tree in graphviz format.
 * --nchains indicates the number of MCMC chains to run in parallel
 * --chainlength indicate the number of iterations in each MCMC
-* --CNA can be set to 1 to use CNA, or 0 to only use mutations and CNLOH events
+* --CNA can be set to 1 to use CNA, or 0 to only use SNVs
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
 
 
 ### Use with Docker
 ```
-docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass COMPASS -i data/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNV 1
+docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass:v1.1 COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNV 1
 ```
 
 ## Input
