@@ -11,7 +11,7 @@
 class Tree{
     private:
         // Tree structure
-        bool use_CNV;
+        bool use_CNA;
         int n_nodes;
         std::vector<Node*> nodes;
         std::vector<Node*> doublets; 
@@ -47,10 +47,10 @@ class Tree{
         double log_likelihood;
         double log_score; //complete score of the tree, including the prior and the likelihood
 
-        Tree(Scores* cache, bool use_CNV); // constructor
+        Tree(Scores* cache, bool use_CNA); // constructor
         Tree(); // empty constructor
         Tree(const Tree& source); // copy constructor (deep copy)
-        Tree(std::string gv_file, bool use_CNV=true); // create tree from graphviz file
+        Tree(std::string gv_file, bool use_CNA=true); // create tree from graphviz file
         ~Tree();
         Tree& operator=(const Tree&); // Assignment operator: deep copy
         
@@ -60,10 +60,10 @@ class Tree{
         
 
         bool is_ancestor(int potential_ancestor, int potential_descendant); 
-        bool rec_check_max_one_event_per_region_per_lineage(int node, std::vector<int> n_CNV_in_region);
+        bool rec_check_max_one_event_per_region_per_lineage(int node, std::vector<int> n_CNA_in_region);
 
 
-        void compute_attachment_scores(bool use_doublets_local);
+        void compute_attachment_scores(bool use_doublets_local,bool recompute_CNA_scores);
         void compute_likelihood(bool allow_diff_dropoutrates=true);
         void compute_prior_score();
         void update_full_score();
@@ -77,11 +77,10 @@ class Tree{
         void EM_step(bool use_doublets_local, bool allow_diff_dropoutrates); // compute the attachment probabilities of each cell (E step) and update the node probabilities and dropout rates (M step)
 
 
-        void to_dot(std::string filename); //save the tree structure to the dot format (for visualization)
-        void to_dot_pretty(std::string filename); //save the tree structure to the dot format (for visualization)
+        void to_dot(std::string filename, bool simplified); //save the tree structure to the dot format (for visualization)
 
-        void find_CNV();
-        void allow_CNV(){use_CNV=true;}
+        void find_CNA();
+        void allow_CNA(){use_CNA=true;}
         bool select_regions(int index=-1);
         bool contains_candidate_regions(){return candidate_regions.size()>0;}
 
@@ -91,15 +90,13 @@ class Tree{
         void prune_reattach();
         void swap_node_labels();
         //void add_remove_mutation();
-        void move_mutation();
+        void move_SNV();
         void split_merge_node();
-        void add_remove_CNLOH();
-        void move_CNLOH();
-        void add_remove_CNV();
-        void move_CNV();
-        void merge_or_duplicate_CNV();
-        void exchange_CNV_CNLOH();
-        void change_alleles_CNV();
+        void add_remove_CNA(bool use_CNA);
+        void move_CNA();
+        void merge_or_duplicate_CNA();
+        void exchange_Loss_CNLOH();
+        void change_alleles_CNA();
 
         double get_regionprobs_variance();
         

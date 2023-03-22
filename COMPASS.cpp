@@ -24,13 +24,13 @@ int main(int argc, char* argv[]){
     parameters.verbose=false;
     // Read command line arguments
     std::string input_file{};
+    std::string regionweights_file{};
     int n_chains=4;
     int chain_length=5000;
-    int burn_in = 1000;
+    int burn_in = -1;
     double temperature=10;
     double betabin_overdisp = parameters.omega_het;
-    bool use_CNV=true;
-    bool apply_filter_regions = true;
+    bool use_CNA=true;
     bool output_simplified = true;
     std::string output{};
     data.sex = "female";
@@ -39,6 +39,9 @@ int main(int argc, char* argv[]){
         std::string argument{argv[i]};
         if (strcmp(argv[i],"-i")==0){
             input_file = argv[i+1];
+        }
+        else if (strcmp(argv[i],"--regionweights")==0){
+            regionweights_file = argv[i+1];
         }
         else if (strcmp(argv[i],"--nchains")==0){
             n_chains=atoi(argv[i+1]);
@@ -61,11 +64,22 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"-d")==0){
             if (strcmp(argv[i+1],"0")==0) parameters.use_doublets=false;
         }
-        else if (strcmp(argv[i],"--CNV")==0){
-            if (strcmp(argv[i+1],"0")==0) use_CNV=false;
+        else if (strcmp(argv[i],"--CNA")==0){
+            if (strcmp(argv[i+1],"0")==0) use_CNA=false;
         }
         else if (strcmp(argv[i],"--filterregions")==0){
-            if (strcmp(argv[i+1],"0")==0) apply_filter_regions=false;
+            if (strcmp(argv[i+1],"0")==0){
+                parameters.filter_regions=false;
+                parameters.filter_regions_CNLOH=false;
+            }
+        }
+        else if (strcmp(argv[i],"--filterregionsCNLOH")==0){
+            if (strcmp(argv[i+1],"0")==0){
+                parameters.filter_regions_CNLOH=false;
+            }
+        }
+        else if (strcmp(argv[i],"--verbose")==0){
+            if (strcmp(argv[i+1],"1")==0) parameters.verbose=true;
         }
         else if (strcmp(argv[i],"--sex")==0){
            data.sex= std::string(argv[i+1]);
@@ -91,8 +105,11 @@ int main(int argc, char* argv[]){
     if (output.size()==0){
         std::cout << "No output name was provided. COMPASS will use the same basename as the input for the output." <<std::endl;
     }
+    if (burn_in==-1){
+        burn_in=chain_length/2;
+    }
 
-    load_CSV(input_file,use_CNV,apply_filter_regions); 
+    load_CSV(input_file,regionweights_file,use_CNA); 
 
     parameters.omega_het = std::min(parameters.omega_het,betabin_overdisp);
     parameters.omega_het_indel = std::min(parameters.omega_het_indel,betabin_overdisp);
@@ -118,7 +135,7 @@ int main(int argc, char* argv[]){
 	for (int i=0;i<n_chains;i++){
 		std::srand(i);
 		Inference infer{"",temperature,i};
-        best_trees[i] = infer.find_best_tree(use_CNV,chain_length,burn_in);
+        best_trees[i] = infer.find_best_tree(use_CNA,chain_length,burn_in);
 		results[i]=best_trees[i].log_score;
 	}
     double best_score=-DBL_MAX;
@@ -129,11 +146,10 @@ int main(int argc, char* argv[]){
             best_score_index = i;
         }
 	}
-    if (output_simplified) best_trees[best_score_index].to_dot_pretty(output);
-    else best_trees[best_score_index].to_dot(output);
+    if (output_simplified) best_trees[best_score_index].to_dot(output,true);
+    else best_trees[best_score_index].to_dot(output,false);
 
     std::string gv_filename(output);
-    std::cout<<output.size() << std::endl;
     if ( output.size()<= 3 || (output.size()>3 && output.substr(output.size()-3)!=".gv")){
         gv_filename = output + + "_tree.gv";
     }

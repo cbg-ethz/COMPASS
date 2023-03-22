@@ -21,15 +21,15 @@ extern Data data;
 extern Params parameters;
 
 
-void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
+void load_CSV(std::string base_name, std::string regionweights_file, bool use_CNA){
     std::ifstream file_variants(base_name+"_variants.csv");
     if(!file_variants.is_open()) throw std::runtime_error("Could not open variants file");
-    // Read region counts (if use CNV)
+    // Read region counts (if use CNA)
     std::vector<std::vector<int>> region_counts{};
     data.region_to_name.clear();
     data.region_to_chromosome.clear();
     std::string line, val;
-    if(use_CNV){
+    if(use_CNA){
         std::ifstream file_region(base_name+"_regions.csv");
         if (!file_region.is_open()) throw std::runtime_error("Could not open region file");
         int region_index=0;
@@ -182,14 +182,14 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
         }
     }
 
-    if (use_CNV && data.region_to_name.size()==0){
+    if (use_CNA && data.region_to_name.size()==0){
         for (int k=0;k<n_regions;k++) data.region_to_name.push_back(std::to_string(k));
     }
     
 
     // In case no mapping from variants to regions were provided
     if (data.locus_to_region.size()==0){
-        if (use_CNV) throw std::invalid_argument("Missing region information for variants. When using CNVs, the variants file must contain a column indicating to which region (amplicon or gene) each variant belongs.");
+        if (use_CNA) throw std::invalid_argument("Missing region information for variants. When using CNAs, the variants file must contain a column indicating to which region (amplicon or gene) each variant belongs.");
         for (int i=0;i<n_loci;i++){
             data.locus_to_region.push_back(i);
             data.region_to_name.push_back(data.locus_to_name[i]);
@@ -223,7 +223,7 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
         }
         cells[j].name = cell_names[j];
         int total_count=0;
-        if (use_CNV){
+        if (use_CNA){
             for (int i=0;i<n_regions;i++){
                 cells[j].region_counts.push_back(region_counts[i][j]);
                 total_count+=region_counts[i][j];
@@ -231,14 +231,32 @@ void load_CSV(std::string base_name, bool use_CNV, bool apply_filter_regions){
             cells[j].total_counts=total_count;
         }
     }
-    
-    if (use_CNV){
-        if (apply_filter_regions) filter_regions();
+    data.predetermined_region_weights.clear();
+    if (use_CNA){
+        // Read region weights, if they are given as input
+        if (regionweights_file!=""){
+            data.predetermined_region_weights = std::vector<double>(n_regions,-1);
+            std::string line, val;
+            std::ifstream file_region(regionweights_file);
+            if (!file_region.is_open()) throw std::runtime_error("Could not open file with region weights.");
+            int region_index=0;
+            while(std::getline(file_region,line,'\n')){
+                int idx_comma=0;
+                while (line[idx_comma]!=',') idx_comma++;
+                std::string region_name = line.substr(0,idx_comma);
+                double weight = stod(line.substr(idx_comma+1,line.size()-idx_comma-1));
+                for (int k=0;k<n_regions;k++){
+                    if (data.region_to_name[k] == region_name){
+                        data.predetermined_region_weights[k] = weight;
+                    }
+                }
+            }
+        }
+        // Filter regions with insufficient coverage
+        if (parameters.filter_regions) filter_regions();
         else data.region_is_reliable = std::vector<bool>(n_regions,true);
     }
     else data.region_is_reliable = std::vector<bool>(n_regions,false);
-    
-    
 }
 
 
@@ -249,25 +267,28 @@ void filter_regions(){
     // Filter out regions for which many cells have 0 (or almost 0) reads
     double threshold = 1.0 / n_regions / 15.0;
     data.region_is_reliable.clear();
-    std::string outverbose = "The following regions are excluded from the CNV inference because their coverage is too low: ";
     bool regions_filtered=false;
     for (int k=0;k<n_regions;k++){
         int count_cells_below_threshold=0;
         double mean=0;
         for (int j=0;j<n_cells;j++){
-            
             if (1.0*cells[j].region_counts[k] / cells[j].total_counts <= threshold) count_cells_below_threshold++;
             mean+= 1.0*cells[j].region_counts[k] / cells[j].total_counts / n_cells;
         }
-        data.region_is_reliable.push_back(((1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions)));
-        regions_filtered = regions_filtered || (!(1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions));
+        bool is_reliable = ((1.0*count_cells_below_threshold/n_cells <= 0.04) && (mean>=0.2/n_regions));
+        if (data.predetermined_region_weights.size()>k && data.predetermined_region_weights[k]==-1) is_reliable=false;
+        data.region_is_reliable.push_back(is_reliable);
+        regions_filtered = regions_filtered || ((1.0*count_cells_below_threshold/n_cells > 0.04) || (mean<0.2/n_regions));
     }
     if (regions_filtered){
-        std::cout<<"The following regions are excluded from the CNV inference because their coverage is too low: ";
+        std::cout<<"The following regions are excluded from the CNA inference because their coverage is too low: ";
         for (int k=0;k<n_regions;k++){
             if (!data.region_is_reliable[k]) std::cout<<data.region_to_name[k]<<",";
         }
         std::cout<<std::endl;
+    }
+    else{
+        std::cout<<"No regions filtered "<<std::endl;
     }
     
 }
@@ -276,7 +297,7 @@ void init_params(){
     parameters.sequencing_error_rate=0.02;
 	parameters.omega_hom=50.0;
 	parameters.omega_het=8.0;
-	parameters.sequencing_error_rate_indel=0.06; // higher error rate and dispersion for indels because the read calls do not seem so reliable
+	parameters.sequencing_error_rate_indel=0.06; // higher error rate and dispersion for indels because the allelic calls are less reliable
 	parameters.omega_hom_indel = 15.0;
 	parameters.omega_het_indel = 4.0;
 
@@ -287,13 +308,14 @@ void init_params(){
 	parameters.doublet_rate=0.08;
 
     parameters.use_doublets=true;
+    parameters.filter_regions=true; // if true, only allow CNAs on regions with sufficient coverage
+    parameters.filter_regions_CNLOH=true; // if filter_regions_CNLOH is false but filter_regions is true, CNLOH will still be possible in the regions with low coverage (but not gains and losses).
     parameters.verbose=true;
 
     // Tree prior
-    parameters.node_cost=1.0;
-    parameters.CNLOH_cost=170.0;
-    parameters.CNV_cost=85.0;
-    parameters.CNV_LOH_cost=85.0;
+    parameters.node_cost=1.0; //higher value will result in fewer nodes
+    parameters.CNA_cost=85.0; //Higher values will result in fewer CNAs
+    parameters.LOH_cost=85.0; // CNLOH and losses resulting in a LOH have a higher penalty (the penalty for such an event is the sum of CNA_cost and LOH_cost)
     parameters.mut_notAtRoot_cost=10;
-    parameters.mut_notAtRoot_freq_cost=100000;
+    parameters.mut_notAtRoot_freq_cost=100000; // Penalty for not placing SNVs present in the 1000G database at the root.
 }

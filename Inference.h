@@ -20,8 +20,8 @@ class Inference{
     public:
         Inference(std::string name="best_tree.gv", double temperature=10.0,int index=-1);
         ~Inference();
-        Tree find_best_tree(bool use_CNV=true,int nb_steps=5000, int burn_in=1000);
-        void mcmc(bool use_CNV, int nb_steps, int burn_in=1000);
+        Tree find_best_tree(bool use_CNA=true,int nb_steps=5000, int burn_in=1000);
+        void mcmc(bool use_CNA, int nb_steps, int burn_in=1000);
         int select_move(int max_move_index);
 
 };

@@ -1,0 +1,150 @@
+
+import os 
+import pandas as pd
+
+#data_dir="/omics/groups/OE0219/internal/Etienne/master/data/preprocessed_data/"
+#metadata="/omics/groups/OE0219/internal/Etienne/master/data/metadata.csv"
+data_dir="/cluster/work/bewi/members/esollier/data_AML_Morita2020/preprocessed/"
+metadata="/cluster/work/bewi/members/esollier/data_AML_Morita2020/metadata.csv"
+output_dir = "out/"
+
+for directory in [output_dir+"BITSC2"]:
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+sample2ncells={}
+sample2nloci={}
+for f in os.listdir(data_dir):
+    if f.endswith("_genotypes.csv"):
+        with open(os.path.join(data_dir,f),"r") as infile:
+                if (len(infile.readlines())<=0):
+                    continue
+        sample = f.split("_")[0]
+        df = pd.read_csv(os.path.join(data_dir,f),sep=" ",header=None)
+        sample2nloci[sample] = df.shape[0]
+        sample2ncells[sample] = df.shape[1]
+
+#samples = ["AML-01-001","AML-02-001"]
+samples = list(sample2ncells.keys())
+for sample in ["AML-44-001","AML-55-001","AML-88-002","AML-104-001"]:
+    if sample in samples:
+        samples.remove(sample)
+samples_SCITE=[]
+for sample in samples:
+    df_tmp = pd.read_csv(data_dir+sample+"_variants.csv")
+    if df_tmp.shape[0]>1: samples_SCITE.append(sample)
+
+
+#samples_SCITE=["AML-02-001","AML-28-001"]
+
+df_metadata=pd.read_csv(metadata,sep=",")
+sample2sex={}
+for i in df_metadata.index:
+    sample2sex[df_metadata.loc[i,"Sample Name"]] = df_metadata.loc[i,"sex"]
+for sample in samples:
+    if not sample in sample2sex:
+        sample2sex[sample] = "female"
+
+#samples = ["AML-01-001","AML-02-001"]
+#samples_SCITE = samples
+
+
+rule all:
+    params:
+        threads="1",
+        runtime="10",
+        memory="1000"
+    input:
+        expand(output_dir+"COMPASS/{sample}_tree.svg",sample=samples),
+        expand(output_dir+"infSCITE/{sample}_tree.svg",sample=samples_SCITE),
+        expand(output_dir+"infSCITE-doublet/{sample}_tree.svg",sample=samples_SCITE),
+        expand(output_dir+"BITSC2/{sample}_tree.svg",sample=samples_SCITE)
+
+rule run_COMPASS:
+    params:
+        threads="6",
+        runtime="2:00",
+        memory="12G",
+        sex = lambda wcs: sample2sex[wcs.sample],
+        filterregionsCNLOH = lambda wcs: "0" if wcs.sample in ["AML-02-001","AML-89-001","AML-92-001"] else "1"
+    input:
+        data_dir+"{sample}_variants.csv",
+        data_dir+"{sample}_regions.csv"
+    output:
+        gv=output_dir+"COMPASS/{sample}_tree.gv",
+        svg=output_dir+"COMPASS/{sample}_tree.svg",
+    benchmark:
+        output_dir+"benchmarks/{sample}_COMPASS.txt"
+    shell:
+        """
+        ./COMPASS -i {data_dir}{wildcards.sample} -o {output_dir}COMPASS/{wildcards.sample} --nchains 6 --chainlength 6000 --CNA 1 --sex {params.sex} --filterregionsCNLOH {params.filterregionsCNLOH}; 
+        dot -Tsvg -o {output.svg} {output.gv}
+        """
+
+rule run_infSCITE:
+    params:
+        threads="1",
+        runtime="2:00",
+        memory="2G",
+        ncells=lambda wcs: sample2ncells[wcs.sample],
+        nloci=lambda wcs: sample2nloci[wcs.sample]
+    input:
+        genotypes=data_dir+"{sample}_genotypes.csv",
+        genenames=data_dir+"{sample}.geneNames"
+    output:
+        gv=output_dir+"infSCITE/{sample}_map0.gv",
+        gv2=output_dir+"infSCITE/{sample}_tree.gv",
+        svg=output_dir+"infSCITE/{sample}_tree.svg"
+    benchmark:
+        output_dir+"benchmarks/{sample}_SCITE.txt"
+    shell:
+        """
+        ./infSCITE -i {input.genotypes} -o {output_dir}infSCITE/{wildcards.sample} -n {params.nloci} -m {params.ncells} -r 16 -l 10000 -fd 0.01 -ad 0.08 0.08 -cc 0.01 -s -a;
+        python convert_tree_SCITE.py -i {output.gv} -o  {output_dir}infSCITE/{wildcards.sample} --names {input.genenames}
+        dot -Tsvg -o {output.svg} {output.gv2}
+        """
+
+rule run_infSCITE_doublet:
+    params:
+        threads="1",
+        runtime="22:00",
+        memory="2G",
+        ncells=lambda wcs: sample2ncells[wcs.sample],
+        nloci=lambda wcs: sample2nloci[wcs.sample]
+    input:
+        genotypes=data_dir+"{sample}_genotypes.csv",
+        genenames=data_dir+"{sample}.geneNames"
+    output:
+        gv=output_dir+"infSCITE-doublet/{sample}_map0.gv",
+        gv2=output_dir+"infSCITE-doublet/{sample}_tree.gv",
+        svg=output_dir+"infSCITE-doublet/{sample}_tree.svg"
+    benchmark:
+        output_dir+"benchmarks/{sample}_infSCITE-doublet.txt"
+    shell:
+        """
+        ./infSCITE -i {input.genotypes} -o {output_dir}infSCITE-doublet/{wildcards.sample} -n {params.nloci} -m {params.ncells} -r 4 -l 6000 -fd 0.01 -ad 0.08 0.08 -cc 0.01 -s -d -a;
+        cp {output.gv} {output.gv2}
+        python convert_tree_SCITE.py -i {output.gv} -o {output_dir}infSCITE-doublet/{wildcards.sample} --names {input.genenames}
+        dot -Tsvg -o {output.svg} {output.gv2}
+        """
+
+rule run_BITSC2:
+    params:
+        threads="1",
+        runtime="32:00",
+        memory="10G"
+    input:
+        data_dir+"{sample}_AD.csv",
+        data_dir+"{sample}_DP.csv",
+        data_dir+"{sample}_segments.csv"
+    output:
+        treegv=output_dir+"BITSC2/{sample}_tree.gv",
+        treesvg=output_dir+"BITSC2/{sample}_tree.svg"
+    benchmark:
+        output_dir+"benchmarks/{sample}_BITSC2.txt"
+    shell:
+        """
+        Rscript --vanilla BiTSC2/BiTSC2_script.R {data_dir}{wildcards.sample} {output_dir}BITSC2/{wildcards.sample} 1000
+        python convert_tree_BITSC2.py -i {output_dir}BITSC2/{wildcards.sample} -o {output_dir}BITSC2/{wildcards.sample} --metadata {data_dir}{wildcards.sample}
+        dot -Tsvg -o {output.treesvg} {output.treegv}
+        """
