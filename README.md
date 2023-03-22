@@ -9,7 +9,7 @@ This tool can be used to infer a tree of somatic events (mutations and copy numb
 git clone https://github.com/cbg-ethz/COMPASS.git
 cd COMPASS
 make
-./COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
+./COMPASS -i data/preprocessed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
 dot -Tpng -o AML-59-001_tree.png AML-59-001_tree.gv
 ```
 
@@ -27,10 +27,12 @@ Where:
 * --CNA can be set to 1 to use CNA, or 0 to only use SNVs
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
 
+In targeted sequencing, different regions have different coverages, depending on the number of amplicons targeting each region and the efficiency of the primers. By default, COMPASS will use the cells attached to the root in order to estimate the proportion of reads falling on each region in the absence of CNAs. Optionally, it is possible to provide the weights of each region with the arguments --regionweights. An example csv file is provided in `data/preprocessed_data_Morita2020/region_weights_50amplicons.csv` and a script to generate such a csv file is provided at `Experiments/preprocessing/estimate_region_weights.py`.
+
 
 ### Use with Docker
 ```
-docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass:v1.1 COMPASS -i data/processed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
+docker run -t -v `pwd`:`pwd` -w `pwd` esollier/compass:v1.1 COMPASS -i data/preprocessed_data_AML_Morita2020/AML-59-001 -o AML-59-001 --nchains 4 --chainlength 5000 --CNA 1
 ```
 
 ## Input
@@ -51,7 +53,7 @@ If [output_name] ends with .gv , COMPASS will only output the tree in graphviz f
 * [output_name]_nodes_genotypes.tsv: Genotype of each SNV for each node (0: no mutation; 1: heterozygous; 2: homozygous mutated)
 * [output_name]_nodes_copynumbers.tsv: Copy number of each region for each node
 
-The `data/output` directory contains an example output.
+The `data/output_example` directory contains an example output.
 
 
 
