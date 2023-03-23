@@ -67,6 +67,9 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"--CNA")==0){
             if (strcmp(argv[i+1],"0")==0) use_CNA=false;
         }
+        else if (strcmp(argv[i],"--CNV")==0){
+            if (strcmp(argv[i+1],"0")==0) use_CNA=false;
+        }
         else if (strcmp(argv[i],"--filterregions")==0){
             if (strcmp(argv[i+1],"0")==0){
                 parameters.filter_regions=false;
