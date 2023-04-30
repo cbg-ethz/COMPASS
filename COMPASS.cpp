@@ -58,6 +58,27 @@ int main(int argc, char* argv[]){
         else if (strcmp(argv[i],"--overdisp")==0){
             betabin_overdisp=atof(argv[i+1]);
         }
+        else if (strcmp(argv[i],"--doubletrate")==0){
+            parameters.doublet_rate=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--dropoutrate")==0){ // mean of the prior dropout rate
+            parameters.prior_dropoutrate_mean=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--dropoutrate_concentration")==0){ // concentration parameter for the beta binomial distribution for the dropout rates (higher values: dropout rates will be closer to the mean)
+            parameters.prior_dropoutrate_omega=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--seqerror")==0){ // sequencing error rate
+            parameters.sequencing_error_rate=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--nodecost")==0){ // Penalty for adding nodes in the tree
+            parameters.node_cost=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--cnacost")==0){ // Penalty for adding CNA events in the tree
+            parameters.CNA_cost=atof(argv[i+1]);
+        }
+        else if (strcmp(argv[i],"--lohcost")==0){ // Penalty for adding loh events in the tree
+            parameters.LOH_cost=atof(argv[i+1]);
+        }
         else if (strcmp(argv[i],"-o")==0){
             output=argv[i+1];
         }

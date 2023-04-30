@@ -301,8 +301,9 @@ void init_params(){
 	parameters.omega_hom_indel = 15.0;
 	parameters.omega_het_indel = 4.0;
 
-    parameters.prior_dropoutrate_mean=0.05;
-    parameters.prior_dropoutrate_omega=100;
+    // The dropout rates are inferred for each SNV, using a beta distribution as prior
+    parameters.prior_dropoutrate_mean=0.05; 
+    parameters.prior_dropoutrate_omega=100; // concentration parameter for the beta distribution (higher values: force the dropout rates to be close to the prior mean)
 
 	parameters.theta=6.0;
 	parameters.doublet_rate=0.08;
