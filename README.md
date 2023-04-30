@@ -26,6 +26,7 @@ Where:
 * --chainlength indicate the number of iterations in each MCMC
 * --CNA can be set to 1 to use CNA, or 0 to only use SNVs
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
+
 Additional parameters can be changed if needed, although their default values should work for most cases:
 * -d (default: 1): if 1, COMPASS will use the model with doublets, and if 0, COMPASS will use the model without doubets (faster)
 * --doubletrate (default: 0.08) determines the doublet rate, in case -d is set to 1.
