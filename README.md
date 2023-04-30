@@ -26,6 +26,15 @@ Where:
 * --chainlength indicate the number of iterations in each MCMC
 * --CNA can be set to 1 to use CNA, or 0 to only use SNVs
 * --sex can be female (default, 2 X chromosomes) or male (1 X chromosome)
+Additional parameters can be changed if needed, although their default values should work for most cases:
+* -d (default: 1): if 1, COMPASS will use the model with doublets, and if 0, COMPASS will use the model without doubets (faster)
+* --doubletrate (default: 0.08) determines the doublet rate, in case -d is set to 1.
+* --dropoutrate (default: 0.05): prior mean of the allelic dropout rates. The dropout rates will be estimated for each SNV with a beta binomial distribution.
+* --dropoutrate_concentration (default: 100): prior concentration parameter for the beta binomial distribution for dropout rates. Higher values will result in the estimated dropout rates to be closer to the prior mean.
+* --seqerror (default: 0.02): sequencing error rate
+* --nodecost (default: 1): cost of adding a node to the tree
+* --cnacost (default: 85): cost of adding a CNA event to the tree
+* --lohcost (default: 85) cost of adding a LOH event to the tree
 
 In targeted sequencing, different regions have different coverages, depending on the number of amplicons targeting each region and the efficiency of the primers. By default, COMPASS will use the cells attached to the root in order to estimate the proportion of reads falling on each region in the absence of CNAs. Optionally, it is possible to provide the weights of each region with the arguments --regionweights. An example csv file is provided in `data/preprocessed_data_Morita2020/region_weights_50amplicons.csv` and a script to generate such a csv file is provided at `Experiments/preprocessing/estimate_region_weights.py`.
 
