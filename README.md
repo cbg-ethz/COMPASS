@@ -4,6 +4,9 @@ COpy number and Mutations Phylogeny from Amplicon Single-cell Sequencing
 
 This tool can be used to infer a tree of somatic events (mutations and copy number alterations) that occurred in a tumor. It is specifically designed to be used for MissionBio's Tapestri data, where a small number of amplicons (50-300) are sequenced for thousands of single-cells.
 
+The method is described in the publication: [COMPASS: joint copy number and mutation phylogeny reconstruction from amplicon single-cell sequencing data, Sollier et al., Nature Communications 2023](https://www.nature.com/articles/s41467-023-40378-8)
+
+
 ## Quick start
 ```
 git clone https://github.com/cbg-ethz/COMPASS.git
