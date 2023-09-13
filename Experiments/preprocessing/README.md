@@ -20,6 +20,7 @@ Optional arguments:
 | --SNP     | Path to a tsv file containing the population frequency of variants (see below)       |
 | --region   | Region to use for inferring CNVs; must be either 'gene' or 'amplicon' (default: gene).       |
 | --panel   | Path to a csv file describing the amplicons. This is sometimes useful to get the correct name of the amplicons.  |
+| --ref   | The reference genome (default: 37). Can be 37 for GRCh37 or 38 for GRCh38.  |
 
 ## Whitelist
 
@@ -28,4 +29,4 @@ In case, you already know which mutations to include in the analysis, the list o
 ## Population Frequency
 
 Optionally, the preprocessing script can take as input a tsv file containing the population frequency of variants. This is used in the preprocessing to remove germline variants (unless they appear to be affected by LOH in some cells) and, in COMPASS, to penalize variants with a high population frequency which are not placed at the root (since they are likely to be germline variants).
-The file that we used was generated using the script `download_1000G.sh`, which was adapted from [this script](https://github.com/single-cell-genetics/cellSNP/blob/master/SNPlist_1Kgenome.sh).
+The file that we used was generated using the script `download_1000G.sh`, which was adapted from [this script](https://github.com/single-cell-genetics/cellSNP/blob/master/SNPlist_1Kgenome.sh). You can download it from https://drive.google.com/file/d/14Mm4-ynmaqxFuDFOTTr6PLjkvnBJeabS/view?usp=sharing . 
