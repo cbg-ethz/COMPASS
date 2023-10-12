@@ -12,8 +12,10 @@ import numpy as np
 from numpy.core.fromnumeric import var
 import pandas as pd
 import loompy
+import vcfpy
 from varcode import Variant
 from pyensembl import ensembl_grch37, ensembl_grch38
+
 
 
 # Exclude some sites with high error rates
@@ -64,10 +66,26 @@ def get_1K_freq(file,chr,pos,ref,alt):
             if alts[index_alt] == alt and ref_SNP==ref:
                 return float(AFs[index_alt])
     return 0
+
+def read_vcf(sample,vcf_file):
+    reader = vcfpy.Reader.from_path(vcf_file)
+    d={"sample ID":[],"chr":[],"start":[],"ref allele":[],"alt allele":[]}
+    variants_pos = set()
+    variants=set()
+    for record in reader:
+        variants_pos.add(record.CHROM+"_"+str(record.POS))
+        variants.add(record.CHROM+"_"+str(record.POS)+"_"+str(record.REF)+"_"+str(record.ALT[0].value))
+        d["sample ID"].append(sample)
+        d["chr"].append(record.CHROM)
+        d["start"].append(record.POS)
+        d["ref allele"].append(record.REF)
+        d["alt allele"].append(record.ALT[0].value)
+    df = pd.DataFrame(d)
+    return variants_pos,variants
     
 
 def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped, min_frac_loci_genotyped,min_frac_cells_alt, region="gene",\
-                    reference=37,verbose=True,SNP_file=None,panel_file=None,whitelist_file=None):
+                    reference=37,verbose=True,SNP_file=None,panel_file=None,whitelist_file=None,vcf_file=None):
     if reference==37:
         ensembl_ref = ensembl_grch37
     else:
@@ -90,6 +108,12 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
             whitelist_positions.append(pos)
             mutation = pos + "_"+df_mutations.loc[i,"ref allele"] + "_"+df_mutations.loc[i,"alt allele"]
             whitelist.append(mutation)
+
+    # If we have a vcf. In this case, we only consider positions found in the vcf.
+    use_vcf=False
+    if vcf_file is not None:
+        use_vcf= True
+        variants_pos_vcf,variants_vcf=read_vcf(basename,vcf_file)
 
     with loompy.connect(infile) as ds:
         n_loci_full,n_cells_full = ds.shape
@@ -143,6 +167,8 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                     genes_at_pos = ensembl_ref.gene_names_at_locus(contig=chromosomes_full[i], position=int(positions_full[i]))
                     if "SRSF2" in genes_at_pos and (panel_file is None):
                         amplicon_to_gene[amplicons_full[i]] = "SRSF2"
+                    if "ATM" in genes_at_pos and (panel_file is None):
+                        amplicon_to_gene[amplicons_full[i]] = "ATM"
                     elif len(genes_at_pos)==1 and (panel_file is None):
                         amplicon_to_gene[amplicons_full[i]] = genes_at_pos[0]
                     else:
@@ -159,6 +185,13 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
             chr_pos = str(chromosomes_full[i])+"_"+str(positions_full[i])
             if use_whitelist:
                 if chr_pos in whitelist_positions: candidate_loci.append(i)
+            elif use_vcf:
+                if chr_pos in variants_pos_vcf: candidate_loci.append(i)
+                else:
+                    found=False
+                    for p in range(-5,5):
+                        if str(chromosomes_full[i])+"_"+str(positions_full[i]+p) in variants_pos_vcf: found=True
+                    if found: candidate_loci.append(i)
             else:
                 if chr_pos in blacklist: continue
                 n_alt = np.sum( (genotypes[i,:]==1) | (genotypes[i,:]==2) )
@@ -172,6 +205,8 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
         reverse_sort = [0]*len(candidate_loci)
         for i in range(len(candidate_loci)):
             reverse_sort[argsort_candidate[i]] = i
+
+
 
         # Load only the data for the candidate loci. The array has to be loaded with sorted indices
         chromosomes = (ds.ra["CHROM"][sorted_candidate])[reverse_sort]
@@ -216,12 +251,17 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
             count_cells1 = np.sum(genotypes[i,:]==1)
             count_cells2 = np.sum(genotypes[i,:]==2)
             v = str(chromosomes[i])+"_"+str(positions[i])+"_"+ref[i]+"_"+alt[i]
+
+            # Only indels are allowd to have a slightly different as in the vcf
+            if use_vcf and len(ref[i])==1 and len(alt[i])==1 and (not v in variants_vcf): continue
+            print(v)
             if not use_whitelist:
                 # Filter out loci with very few cells genotyped as alt. The filter is a bit more restrictive when there are few total cells
                 if (count_cells1+count_cells2)/max(4000,len(filtered_cells))<=min_frac_cells_alt: continue
                 if (np.sum(AD[i,:]>min_DP)/max(4000,len(filtered_cells))<=min_frac_cells_alt): continue # require minimum AD for evidence of alt
                 # Filter out germline variants homozygous alt
                 if count_cells0 <=0.01 * max(4000,n_cells) and count_cells1<0.03*max(4000,n_cells): continue
+            print("Passed first filters")
 
             
 
@@ -237,15 +277,20 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                     alt_split=alt[i].split("+")
                     ref[i] = alt_split[0]
                     alt[i] = alt_split[1]
-                variant = Variant(contig=str(chromosomes[i]), start=positions[i], ref=ref[i], alt=alt[i], ensembl=ensembl_ref)
-                effects = variant.effects()
-                topPriorityEffect = effects.top_priority_effect()
-                nonsynonymous_variant = (topPriorityEffect.gene_name is not None) and (not topPriorityEffect.short_description in ["silent","intronic","3' UTR","5' UTR","incomplete"])
                 
-                if topPriorityEffect.gene_name is not None:
-                    variant_name = topPriorityEffect.gene_name + " " + topPriorityEffect.short_description
-                else:
-                    variant_name = amplicons[i] + " intergenic"
+                try:
+                    variant = Variant(contig=str(chromosomes[i]), start=positions[i], ref=ref[i], alt=alt[i], ensembl=ensembl_ref)
+                    effects = variant.effects()
+                    topPriorityEffect = effects.top_priority_effect()
+                    nonsynonymous_variant = (topPriorityEffect.gene_name is not None) and (not topPriorityEffect.short_description in ["silent","intronic","3' UTR","5' UTR","incomplete"])
+                    if topPriorityEffect.gene_name is not None:
+                        variant_name = topPriorityEffect.gene_name + " " + topPriorityEffect.short_description
+                    else:
+                        variant_name = amplicons[i] + " intergenic"
+                except:
+                    nonsynonymous_variant=False
+                    variant_name=str(chromosomes[i])+"_"+str(positions[i])+"_"+str(ref[i])+"_"+str(alt[i])
+
 
             # Frequency of the variant in the population
             if SNP_file == None:
@@ -263,7 +308,7 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                 min_cells_hom = 120
             elif not nonsynonymous_variant:
                 max_dropout = 0.35
-                max_ratio_dropoutallele=1.3 
+                max_ratio_dropoutallele=1.8 
                 min_cells_hom=100
             else:
                 max_dropout = 0.08
@@ -301,13 +346,17 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                 threshold = 0.28
                 if nonsynonymous_variant: threshold = 0.20
                 if nonsynonymous_variant and n_amplicons>100: threshold=0.15
+                if use_vcf: threshold=0.13
                 count_reffreq_above = count_reffreq_below = count_altfreq_below = count_altfreq_above=0
                 for j in filtered_cells:
-                    if AD[i,j]>0 and AD[i,j]>0.03*RO[i,j]:
-                        if AD[i,j]/DP[i,j]>threshold: count_altfreq_above+=1
+                    ad = AD[i,j]
+                    ro = RO[i,j]
+                    dp = ad + ro
+                    if ad>0 and ad>0.03*ro:
+                        if ad/dp>threshold: count_altfreq_above+=1
                         else: count_altfreq_below+=1
-                    if RO[i,j]>0 and RO[i,j]>0.03*AD[i,j]:
-                        if RO[i,j]/DP[i,j]>threshold: count_reffreq_above+=1
+                    if ro>0 and ro>0.03*ad:
+                        if ro/dp>threshold: count_reffreq_above+=1
                         else: count_reffreq_below+=1
                 print(str(count_altfreq_above)+","+str(count_altfreq_below)+","+str(count_reffreq_above)+","+str(count_reffreq_below))
                 if (count_altfreq_above<count_altfreq_below and count_altfreq_above+count_altfreq_below>500) \
@@ -545,12 +594,13 @@ parser.add_argument('--SNP', type = str,default = None, help='File containing th
 parser.add_argument('--region', type = str,default = "gene", help='Which region to use for CNVs (gene or amplicon)')
 parser.add_argument('--panel', type = str,default = None, help='CSV metadata file for the amplicons. Useful to get the correct name of the amplicons.')
 parser.add_argument('--whitelist', type = str,default = None, help='CSV file containing the mutations to always include')
+parser.add_argument('--vcf', type = str,default = None, help='vcf file for the sample')
 parser.add_argument('--ref', type = int,default = 37, help='Reference genome (37 or 38)')
 args = parser.parse_args()
 
 if len(args.i)>5 and args.i[-5:]==".loom": # Preprocess a single loom file
-    convert_loom(args.i,args.o,15,6,0.2,0.25,0.4,0.015,region=args.region, reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel, whitelist_file = args.whitelist)
+    convert_loom(args.i,args.o,15,6,0.2,0.25,0.4,0.015,region=args.region, reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel, whitelist_file = args.whitelist,vcf_file=args.vcf)
 else: # Preprocess a whole directory of loom files
     for f in sorted(os.listdir(args.i)):
         if len(f)>5 and f[-5:]==".loom":
-            convert_loom(os.path.join(args.i,f),args.o,15,6,0.2,0.25,0.4,0.015,region=args.region,reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel,whitelist_file=args.whitelist)
+            convert_loom(os.path.join(args.i,f),args.o,15,6,0.2,0.25,0.4,0.015,region=args.region,reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel,whitelist_file=args.whitelist,vcf_file=args.vcf)

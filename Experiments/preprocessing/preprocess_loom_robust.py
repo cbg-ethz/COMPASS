@@ -242,15 +242,18 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                     alt_split=alt[i].split("+")
                     ref[i] = alt_split[0]
                     alt[i] = alt_split[1]
-                variant = Variant(contig=str(chromosomes[i]), start=positions[i], ref=ref[i], alt=alt[i], ensembl=ensembl_ref)
-                effects = variant.effects()
-                topPriorityEffect = effects.top_priority_effect()
-                nonsynonymous_variant = (topPriorityEffect.gene_name is not None) and (not topPriorityEffect.short_description in ["silent","intronic","3' UTR","5' UTR","incomplete"])
-                
-                if topPriorityEffect.gene_name is not None:
-                    variant_name = topPriorityEffect.gene_name + " " + topPriorityEffect.short_description
-                else:
-                    variant_name = amplicons[i] + " intergenic"
+                try:
+                    variant = Variant(contig=str(chromosomes[i]), start=positions[i], ref=ref[i], alt=alt[i], ensembl=ensembl_ref)
+                    effects = variant.effects()
+                    topPriorityEffect = effects.top_priority_effect()
+                    nonsynonymous_variant = (topPriorityEffect.gene_name is not None) and (not topPriorityEffect.short_description in ["silent","intronic","3' UTR","5' UTR","incomplete"])
+                    if topPriorityEffect.gene_name is not None:
+                        variant_name = topPriorityEffect.gene_name + " " + topPriorityEffect.short_description
+                    else:
+                        variant_name = amplicons[i] + " intergenic"
+                except:
+                    nonsynonymous_variant=False
+                    variant_name=str(chromosomes[i])+"_"+str(positions[i])+"_"+str(ref[i])+"_"+str(alt[i])
 
             # Frequency of the variant in the population
             if SNP_file == None:
