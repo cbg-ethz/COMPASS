@@ -19,7 +19,8 @@ Optional arguments:
 | ----------- | ----------- |
 | --whitelist   | Path to csv file containing the mutations to include (see `mutations.csv` as an example)        |
 | --SNP     | Path to a tsv file containing the population frequency of variants (see below)       |
-| --region   | Region to use for inferring CNVs; must be either 'gene' or 'amplicon' (default: gene).       |
+| --region   | Region to use for inferring CNVs; must be either 'gene', 'amplicon', 'chromosome' or 'chromosome_arm' (default: gene).       |
+| --centromere   | Path to a file containing the position of centromeres, only required if --region is 'chromosome_arm'. centromeres_GRCh37.txt or centromeres_GRCh38.txt can be used.       |
 | --panel   | Path to a csv file describing the amplicons. This is sometimes useful to get the correct name of the amplicons.  |
 | --ref   | The reference genome (default: 37). Can be 37 for GRCh37 or 38 for GRCh38.  |
 
