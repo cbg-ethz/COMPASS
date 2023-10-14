@@ -82,10 +82,22 @@ def read_vcf(sample,vcf_file):
         d["alt allele"].append(record.ALT[0].value)
     df = pd.DataFrame(d)
     return variants_pos,variants
+
+def read_centromere(centromere_file):
+    d={}
+    with open(centromere_file,"r") as infile:
+        for line in infile:
+            lsplit = line.rstrip("\n").split("\t")
+            d[lsplit[0]] = int(lsplit[1])
+    return d
     
 
 def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped, min_frac_loci_genotyped,min_frac_cells_alt, region="gene",\
-                    reference=37,verbose=True,SNP_file=None,panel_file=None,whitelist_file=None,vcf_file=None):
+                    reference=37,verbose=True,SNP_file=None,panel_file=None,whitelist_file=None,vcf_file=None,centromere=None):
+    if region=="chromosome_arm" and centromere is None:
+        raise("If regions are chromosome arms, then centromeres must be provided.")
+    if centromere is not None:
+        chr_to_centromere = read_centromere(centromere)
     if reference==37:
         ensembl_ref = ensembl_grch37
     else:
@@ -151,6 +163,8 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
             df_panel = pd.read_csv(panel_file)
         amplicon_map={}
         amplicon_to_gene = {}
+        amplicon_to_chr = {}
+        amplicon_to_chrarm={}
         for i in sorted_loci:
             if amplicons_full[i]!="nan" and amplicons_full[i]!="":
                 if len(amplicon_names)==0 or amplicons_full[i]!=amplicon_names[-1]:
@@ -175,6 +189,12 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                         if amplicon_name.startswith("MYE_"):
                             amplicon_name = amplicon_name[4:]
                         amplicon_to_gene[amplicons_full[i]] = amplicon_name.split("_")[0] # Assume amplicon name is gene_xx, potentially prefixed by MYE_
+                    
+                    amplicon_to_chr[amplicons_full[i]] = chromosomes_full[i]
+                    if centromere is not None:
+                        if int(positions_full[i]) < chr_to_centromere[chromosomes_full[i]]: amplicon_to_chrarm[amplicons_full[i]] = chromosomes_full[i]+"p"
+                        else: amplicon_to_chrarm[amplicons_full[i]] = chromosomes_full[i]+"q"
+        
         n_amplicons = len(amplicon_names)
 
 
@@ -446,8 +466,12 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                 variants_info["REGION"].append(amplicon_to_gene[amplicons[locus]])
             elif region=="amplicon":
                 variants_info["REGION"].append(amplicon_map[amplicons[locus]])
+            elif region=="chromosome":
+                variants_info["REGION"].append(amplicon_to_chr[amplicons[locus]])
+            elif region=="chromosome_arm":
+                variants_info["REGION"].append(amplicon_to_chrarm[amplicons[locus]])
             else: 
-                raise NameError("Region must be gene or amplicon")
+                raise NameError("Region must be amplicon, gene, chromosome_arm or chromosome")
             variants_info["NAME"].append(variant_names[i])
             if SNP_file is not None: variants_info["FREQ"].append(variant_frequencies[i])
             else: variants_info["FREQ"].append(0)
@@ -498,6 +522,7 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
                 gene_to_amplicons.append([k])
                 gene_to_name.append(gene)
                 gene_to_chr.append(amplicon_chromosomes[k])
+
         
         gene_matrix = np.zeros((n_genes,n_cells))
         for g in range(n_genes):
@@ -508,6 +533,33 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
         df_genes = pd.DataFrame(gene_matrix,index=index_genes,dtype=int)
         if region=="gene":
             df_genes.to_csv(os.path.join(outdir,basename+"_regions.csv"),sep=",",header=False,index=True)
+
+
+        # If region is chromosome or chromosome arm
+        if region in ["chromosome","chromosome_arm"]:
+            region_list=[]
+            if region=="chromosome":
+                amplicon_to_region = amplicon_to_chr
+                for x in amplicon_to_chr:
+                    if not amplicon_to_chr[x] in region_list: region_list.append(amplicon_to_chr[x])
+            else:
+                amplicon_to_region = amplicon_to_chrarm
+                for x in amplicon_to_chrarm:
+                    if not amplicon_to_chrarm[x] in region_list: region_list.append(amplicon_to_chrarm[x])
+            amplicon_to_regionIdx={}
+            for x in amplicon_to_region:
+                amplicon_to_regionIdx[x] = region_list.index(amplicon_to_region[x])
+            region_matrix = np.zeros((len(region_list),n_cells))
+            for k in range(amplicon_matrix.shape[0]):
+                for j in range(n_cells):
+                    region_matrix[amplicon_to_regionIdx[amplicon_names[k]],j] += amplicon_matrix[k,j]
+            
+            if region=="chromosome":
+                index_region=[x+"_"+x for x in region_list]
+            else:
+                index_region=[x[:-1]+"_"+x for x in region_list]
+            df_region = pd.DataFrame(region_matrix,index=index_region,dtype=int)
+            df_region.to_csv(os.path.join(outdir,basename+"_regions.csv"),sep=",",header=False,index=True)
 
         #############################################
         # SCITE input: genotype matrix and gene names
@@ -540,7 +592,10 @@ def convert_loom(infile,outdir, min_GQ, min_DP, min_AF, min_frac_cells_genotyped
 
         # Add regions which do not have any loci ??
         region2loci={}
-        df_region = df_genes if region=="gene" else df_amplicons
+        if region=="gene":
+            df_region = df_genes
+        elif region=="amplicon":
+            df_region = df_amplicons
         for x in df_region.index:
             region2loci[x[x.find("_")+1:]] = []
         for i in df_variants.index:
@@ -591,16 +646,17 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-i', type = str, help='Input. Can be a loom file or a directory of loom files')
 parser.add_argument('-o', type = str, help='Output directory')
 parser.add_argument('--SNP', type = str,default = None, help='File containing the frequencies of SNPs in the population')
-parser.add_argument('--region', type = str,default = "gene", help='Which region to use for CNVs (gene or amplicon)')
+parser.add_argument('--region', type = str,default = "gene", help='Which region to use for CNVs (amplicon, gene, chromosome_arm or chromosome)')
 parser.add_argument('--panel', type = str,default = None, help='CSV metadata file for the amplicons. Useful to get the correct name of the amplicons.')
 parser.add_argument('--whitelist', type = str,default = None, help='CSV file containing the mutations to always include')
+parser.add_argument('--centromere', type = str,default = None, help='File containing the centromere position for each chromosome.')
 parser.add_argument('--vcf', type = str,default = None, help='vcf file for the sample')
 parser.add_argument('--ref', type = int,default = 37, help='Reference genome (37 or 38)')
 args = parser.parse_args()
 
 if len(args.i)>5 and args.i[-5:]==".loom": # Preprocess a single loom file
-    convert_loom(args.i,args.o,15,6,0.2,0.25,0.4,0.015,region=args.region, reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel, whitelist_file = args.whitelist,vcf_file=args.vcf)
+    convert_loom(args.i,args.o,15,6,0.2,0.25,0.4,0.015,region=args.region, reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel, whitelist_file = args.whitelist,vcf_file=args.vcf,centromere=args.centromere)
 else: # Preprocess a whole directory of loom files
     for f in sorted(os.listdir(args.i)):
         if len(f)>5 and f[-5:]==".loom":
-            convert_loom(os.path.join(args.i,f),args.o,15,6,0.2,0.25,0.4,0.015,region=args.region,reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel,whitelist_file=args.whitelist,vcf_file=args.vcf)
+            convert_loom(os.path.join(args.i,f),args.o,15,6,0.2,0.25,0.4,0.015,region=args.region,reference=args.ref,verbose=True,SNP_file=args.SNP,panel_file = args.panel,whitelist_file=args.whitelist,vcf_file=args.vcf,centromere=args.centromere)
