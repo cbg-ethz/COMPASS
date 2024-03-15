@@ -1,4 +1,5 @@
 # COMPASS
+[![DOI: 10.5281/zenodo.10822292](https://zenodo.org/badge/DOI/10.5281/zenodo.10822292.svg)](https://doi.org/10.5281/zenodo.10822292)
 
 COpy number and Mutations Phylogeny from Amplicon Single-cell Sequencing
 
