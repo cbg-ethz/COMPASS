@@ -1,0 +1,41 @@
+{
+  "title": "COMPASS",
+  "upload_type": "software",
+  "keywords": [
+    "bioinformatics",
+    "cancer",
+    "phylogeny",
+    "C++"
+  ],
+  "creators": [
+    {
+      "name": "Sollier, Etienne",
+      "affiliation": "Department of Biosystems Science and Engineering, ETH Zürich, Basel, Switzerland",
+      "orcid": "0000-0002-3612-8562"
+    } ,
+    {
+      "name": "Kuipers, Jack",
+      "affiliation": "Department of Biosystems Science and Engineering, ETH Zürich, Basel, Switzerland",
+      "orcid": "0000-0001-5357-2705"
+    } ,
+    {
+      "name": "Takahashi, Koichi",
+      "affiliation": "Department of Leukemia, The University of Texas MD Anderson Cancer Center, Houston, TX, USA",
+      "orcid": "0000-0002-8027-9659"
+    } ,
+    {
+      "name": "Beerenwinkel, Niko",
+      "affiliation": "Department of Biosystems Science and Engineering, ETH Zürich, Basel, Switzerland",
+      "orcid": "0000-0002-0573-6119"
+    } ,
+    {
+      "name": "Jahn, Katharina",
+      "affiliation": "Department of Biosystems Science and Engineering, ETH Zürich, Basel, Switzerland",
+      "orcid": "0000-0002-6983-4615"      
+    } 
+  ],
+  "description":"Reconstructing the history of somatic DNA alterations can help understand the evolution of a tumor and predict its resistance to treatment. Single-cell DNA sequencing (scDNAseq) can be used to investigate clonal heterogeneity and to inform phylogeny reconstruction. However, most existing phylogenetic methods for scDNAseq data are designed either for single nucleotide variants (SNVs) or for large copy number alterations (CNAs), or are not applicable to targeted sequencing. Here, we develop COMPASS, a computational method for inferring the joint phylogeny of SNVs and CNAs from targeted scDNAseq data. We evaluate COMPASS on simulated data and apply it to several datasets including a cohort of 123 patients with acute myeloid leukemia. COMPASS detected clonal CNAs that could be orthogonally validated with bulk data, in addition to subclonal ones that require single-cell resolution, some of which point toward convergent evolution.",
+  "access_right":"open",
+  "grants":[{'id':'10.13039/501100001711::310030_179518'}],
+  "licence":"gpl-3.0-only"
+}
