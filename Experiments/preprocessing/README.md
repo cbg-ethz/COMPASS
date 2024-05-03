@@ -17,7 +17,7 @@ Optional arguments:
 
 | Argument      | Description |
 | ----------- | ----------- |
-| --whitelist   | Path to csv file containing the mutations to include (see `mutations.csv` as an example)        |
+| --whitelist   | Path to csv file containing the mutations to include (see `mutations.csv` as an example). The sample IDs in column "sample ID" have to match the names of the loom files (i.e. the loom file has to be called sample.loom if the sample ID is "sample").        |
 | --SNP     | Path to a tsv file containing the population frequency of variants (see below)       |
 | --region   | Region to use for inferring CNVs; must be either 'gene', 'amplicon', 'chromosome' or 'chromosome_arm' (default: gene).       |
 | --centromere   | Path to a file containing the position of centromeres, only required if --region is 'chromosome_arm'. centromeres_GRCh37.txt or centromeres_GRCh38.txt can be used.       |
