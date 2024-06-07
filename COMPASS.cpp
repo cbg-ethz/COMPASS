@@ -5,7 +5,6 @@
 #include <fstream>
 #include <string.h>
 #include <stdexcept>
-#include <omp.h>
 
 #include "Inference.h"
 #include "Tree.h"
@@ -151,11 +150,8 @@ int main(int argc, char* argv[]){
     results.resize(n_chains);
     std::vector<Tree> best_trees{};
     best_trees.resize(n_chains);
-    if (n_chains<omp_get_num_procs()) omp_set_num_threads(n_chains);
-    else omp_set_num_threads(omp_get_num_procs());
 
     std::cout<<"Starting "<<std::to_string(n_chains)<< " MCMC chains in parallel"<<std::endl;
-    #pragma omp parallel for
 	for (int i=0;i<n_chains;i++){
 		std::srand(i);
 		Inference infer{"",temperature,i};
